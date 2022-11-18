@@ -7,7 +7,7 @@ from functools import partial
 from copy import deepcopy
 
 from .ema import EMA
-from .utils import extract
+from .util import extract
 
 class GaussianDiffusion(nn.Module):
     __doc__ = r"""Gaussian Diffusion model. Forwarding through the module returns diffusion reversal scalar loss tensor.
