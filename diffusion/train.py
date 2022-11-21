@@ -1,114 +1,135 @@
 # %%
 # Library
+import os
+import time
+import numpy as np
+import pandas as pd
+import matplotlib.pyplot as plt
+
+import torchio as tio
+import monai
+
+import torch
+import torch.nn as nn
+import torch.nn.functional as F
+import torch.optim as optim
+
+from diffusion.data import DataPreprocessing
+from diffusion.model import Unet3D, GaussianDiffusion3D
+from diffusion.function import *
+from diffusion.util import *
 
 # %%
 def train(args):
-    diffusion = script_utils.get_diffusion_from_args(args).to(device)
-    optimizer = torch.optim.Adam(diffusion.parameters(), lr=args.learning_rate)
-
-    if args.model_checkpoint is not None:
-        diffusion.load_state_dict(torch.load(args.model_checkpoint))
-    if args.optim_checkpoint is not None:
-        optimizer.load_state_dict(torch.load(args.optim_checkpoint))
-
-    if args.log_to_wandb:
-        if args.project_name is None:
-            raise ValueError("args.log_to_wandb set to True but args.project_name is None")
-
-        run = wandb.init(
-            project=args.project_name,
-            entity='treaptofun',
-            config=vars(args),
-            name=args.run_name,
-        )
-        wandb.watch(diffusion)
-
+    # define parameters from arguments
+    lr = args.lr
     batch_size = args.batch_size
+    num_iteration = args.num_iteration
+    dropout = args.dropout
+    
+    time_step = args.time_step
+    schedule = args.schedule
+    base_channels = args.base_channels
+    channel_mults = args.channel_mults
+    num_res_blocks = args.num_res_blocks
+    time_emb_dim = args.time_emb_dim
+    
+    data_dir = args.data_dir
+    ckpt_dir = args.ckpt_dir
+    log_dir = args.log_dir
+    result_dir = args.result_dir
+    
+    log_rate = args.log_rate
+    save_rate = args.save_rate
+    
+    device = torch.device("cuda") if torch.cuda.is_available() else torch.device("cpu")
+    
+    # make directories
+    if not os.path.exists(data_dir):
+        os.makedirs(data_dir)
+    if not os.path.exists(ckpt_dir):
+        os.makedirs(ckpt_dir)
+    if not os.path.exists(log_dir):
+        os.makedirs(log_dir)
+    if not os.path.exists(result_dir):
+        os.makedirs(result_dir)    
+    
+    # data preprocessing
+    data = DataPreprocessing(args)
+    dataloader = cycle(data.get_dataloader())
+    
+    x = next(dataloader)
+    plt.imsave(os.path.join(result_dir, "sample.png"), x[0,0,32,:,:], cmap='gray')
 
-    train_dataset = datasets.CIFAR10(
-        root='./cifar_train',
-        train=True,
-        download=True,
-        transform=script_utils.get_transform(),
+    # define model & optimizer
+    model = Unet3D(
+        1,
+        base_channels,
+        channel_mults,
+        num_res_blocks,
+        time_emb_dim,
     )
-
-    test_dataset = datasets.CIFAR10(
-        root='./cifar_test',
-        train=False,
-        download=True,
-        transform=script_utils.get_transform(),
+    
+    betas = get_schedule(args, s=0.008)
+    
+    diffusion = GaussianDiffusion3D(
+        model,
+        (64,64,64),
+        1,
+        None,
+        betas,
     )
+    
+    opt = optim.Adam(diffusion.parameters(), lr=lr)
+    
+    # load save files
+    ckpt_list = sorted(os.listdir(ckpt_dir))
+    # if ckpt_list:
+    #     load = torch.load(os.path.join(ckpt_dir, ckpt_list[-1]), map_location=device)
+    #     diffusion.load_state_dict(load['net'])
+    #     opt.load_state_dict(load['opt'])
 
-        train_loader = script_utils.cycle(DataLoader(
-            train_dataset,
-            batch_size=batch_size,
-            shuffle=True,
-            drop_last=True,
-            num_workers=2,
-        ))
-        test_loader = DataLoader(test_dataset, batch_size=batch_size, drop_last=True, num_workers=2)
+    #     for state in opt.state.values():
+    #         for k, v in state.items():
+    #             if torch.is_tensor(v):
+    #                 state[k] = v.to(device)
         
-        acc_train_loss = 0
+    # train loop
+    diffusion = diffusion.to(device)
 
-        for iteration in range(1, args.iterations + 1):
-            diffusion.train()
+    train_loss_list = []
+    
+    for i in range(1, num_iteration+1):
+        data = next(dataloader).to(device)
+        loss = diffusion(data)
+        train_loss_list.append(loss.item())
 
-            x, y = next(train_loader)
-            x = x.to(device)
-            y = y.to(device)
-
-            if args.use_labels:
-                loss = diffusion(x, y)
-            else:
-                loss = diffusion(x)
-
-            acc_train_loss += loss.item()
-
-            optimizer.zero_grad()
-            loss.backward()
-            optimizer.step()
-
-            diffusion.update_ema()
-            
-            if iteration % args.log_rate == 0:
-                test_loss = 0
-                with torch.no_grad():
-                    diffusion.eval()
-                    for x, y in test_loader:
-                        x = x.to(device)
-                        y = y.to(device)
-
-                        if args.use_labels:
-                            loss = diffusion(x, y)
-                        else:
-                            loss = diffusion(x)
-
-                        test_loss += loss.item()
-                
-                if args.use_labels:
-                    samples = diffusion.sample(10, device, y=torch.arange(10, device=device))
-                else:
-                    samples = diffusion.sample(10, device)
-                
-                samples = ((samples + 1) / 2).clip(0, 1).permute(0, 2, 3, 1).numpy()
-
-                test_loss /= len(test_loader)
-                acc_train_loss /= args.log_rate
-
-                wandb.log({
-                    "test_loss": test_loss,
-                    "train_loss": acc_train_loss,
-                    "samples": [wandb.Image(sample) for sample in samples],
-                })
-
-                acc_train_loss = 0
-            
-            if iteration % args.checkpoint_rate == 0:
-                model_filename = f"{args.log_dir}/{args.project_name}-{args.run_name}-iteration-{iteration}-model.pth"
-                optim_filename = f"{args.log_dir}/{args.project_name}-{args.run_name}-iteration-{iteration}-optim.pth"
-
-                torch.save(diffusion.state_dict(), model_filename)
-                torch.save(optimizer.state_dict(), optim_filename)
+        opt.zero_grad()
+        loss.backward()
+        opt.step()
         
-        if args.log_to_wandb:
-            run.finish()
+        if i % log_rate == 0:
+            # calculate running loss
+            
+            print("Iteration %d / %d | loss %.4f"
+                  %(i, num_iteration, np.mean(train_loss_list))
+            )
+            
+
+        if i % save_rate == 0:
+            # save nii file
+            sample = diffusion.sample(1, device=device, y=None, use_ema=False)
+            sample = sample[0,0,:,:,:].detach().cpu().numpy()
+            
+            plt.imsave(os.path.join(result_dir, f"Iteration{i}_sag.png"), sample[32,:,:], cmap='gray')
+            plt.imsave(os.path.join(result_dir, f"Iteration{i}_Batch{i}_cor.png"), sample[:,32,:], cmap='gray')
+            plt.imsave(os.path.join(result_dir, f"Iteration{i}_Batch{i}_axi.png"), sample[:,:,32], cmap='gray')
+            
+            save_path = os.path.join(ckpt_dir, 'model_iteration%d.pth' %i)
+            torch.save({
+                'net': diffusion.state_dict(),
+                'opt': opt.state_dict(),
+                'loss': train_loss_list
+            }, save_path)
+            print('model saved!')
+

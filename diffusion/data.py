@@ -8,14 +8,15 @@ from torch.utils.data import Dataset, DataLoader
 import monai
 from monai.transforms import (
     Compose, LoadImage, LoadImaged,
-    EnsureChannelFirst, ResizeWithPadOrCrop, EnsureType
+    EnsureChannelFirst, ResizeWithPadOrCrop, EnsureType,
+    Resize
 )
 
 # %%
 # define Datasets class
 class Datasets(Dataset):
     def __init__(self, df):
-        self.df
+        self.df = df
         
     def __len__(self):
         return len(self.df)
@@ -42,7 +43,7 @@ class DataPreprocessing():
         transform = Compose([
             LoadImage(image_only=True),
             EnsureChannelFirst(),
-            ResizeWithPadOrCrop(spatial_size=[256,256,256]),
+            Resize(spatial_size=[64,64,64]),
             EnsureType(data_type='tensor')
         ])
         

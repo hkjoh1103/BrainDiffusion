@@ -2,13 +2,6 @@ import argparse
 import torchvision
 import torch.nn.functional as F
 
-from .unet import UNet
-from .diffusion import (
-    GaussianDiffusion,
-    generate_linear_schedule,
-    generate_cosine_schedule,
-)
-
 
 def cycle(dl):
     """
@@ -121,7 +114,3 @@ def get_diffusion_from_args(args):
 
     return diffusion
 
-def extract(a, t, x_shape):
-    b, *_ = t.shape
-    out = a.gather(-1, t)
-    return out.reshape(b, *((1,) * (len(x_shape) - 1)))
