@@ -37,7 +37,7 @@ parser.add_argument("--log_dir", default="./log", type=str, dest="log_dir")
 parser.add_argument("--result_dir", default="./result", type=str, dest="result_dir")
 
 parser.add_argument("--log_rate", default=10, type=int, dest="log_rate")
-parser.add_argument("--save_rate", default=100, type=int, dest="save_rate")
+parser.add_argument("--save_rate", default=1000, type=int, dest="save_rate")
 
 args = parser.parse_args()
 
@@ -54,3 +54,4 @@ if __name__ == "__main__":
         except KeyboardInterrupt:
             print('Erroor: Keyboard Interrupt')
 # %%
+

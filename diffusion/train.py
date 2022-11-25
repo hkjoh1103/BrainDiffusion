@@ -42,7 +42,11 @@ def train(args):
     log_rate = args.log_rate
     save_rate = args.save_rate
     
-    device = torch.device("cuda") if torch.cuda.is_available() else torch.device("cpu")
+    if torch.cuda.device_count() >= 2:
+        device = torch.device("cuda:0")
+        device2 = torch.device("cuda:1")
+    else:
+        device = torch.device("cuda") if torch.cuda.is_available() else torch.device("cpu")
     
     # make directories
     if not os.path.exists(data_dir):
@@ -59,7 +63,7 @@ def train(args):
     dataloader = cycle(data.get_dataloader())
     
     x = next(dataloader)
-    plt.imsave(os.path.join(result_dir, "sample.png"), x[0,0,32,:,:], cmap='gray')
+    plt.imsave(os.path.join(result_dir, "sample.png"), x[0,0,16,:,:], cmap='gray')
 
     # define model & optimizer
     model = Unet3D(
@@ -74,7 +78,7 @@ def train(args):
     
     diffusion = GaussianDiffusion3D(
         model,
-        (64,64,64),
+        (32,32,32),
         1,
         None,
         betas,
@@ -95,7 +99,10 @@ def train(args):
     #                 state[k] = v.to(device)
         
     # train loop
-    diffusion = diffusion.to(device)
+    if torch.cuda.device_count() >= 2:
+        diffusion = diffusion.to(device2)
+    else:
+        diffusion = diffusion.to(device)
 
     train_loss_list = []
     
@@ -115,21 +122,26 @@ def train(args):
                   %(i, num_iteration, np.mean(train_loss_list))
             )
             
-
+        
         if i % save_rate == 0:
-            # save nii file
-            sample = diffusion.sample(1, device=device, y=None, use_ema=False)
-            sample = sample[0,0,:,:,:].detach().cpu().numpy()
+            with torch.no_grad():
+                # save nii file
+                sample = diffusion.sample(1, device=device, y=None, use_ema=False)
+                sample = sample[0,0,:,:,:].detach().cpu().numpy()
             
-            plt.imsave(os.path.join(result_dir, f"Iteration{i}_sag.png"), sample[32,:,:], cmap='gray')
-            plt.imsave(os.path.join(result_dir, f"Iteration{i}_Batch{i}_cor.png"), sample[:,32,:], cmap='gray')
-            plt.imsave(os.path.join(result_dir, f"Iteration{i}_Batch{i}_axi.png"), sample[:,:,32], cmap='gray')
-            
-            save_path = os.path.join(ckpt_dir, 'model_iteration%d.pth' %i)
-            torch.save({
-                'net': diffusion.state_dict(),
-                'opt': opt.state_dict(),
-                'loss': train_loss_list
-            }, save_path)
-            print('model saved!')
+                plt.imsave(os.path.join(result_dir, f"Iteration{i}_sag.png"), sample[16,:,:], cmap='gray')
+                plt.imsave(os.path.join(result_dir, f"Iteration{i}_cor.png"), sample[:,16,:], cmap='gray')
+                plt.imsave(os.path.join(result_dir, f"Iteration{i}_axi.png"), sample[:,:,16], cmap='gray')
+                
+                #save one pth file
+                save_path = os.path.join(ckpt_dir, 'model_test1.pth')
+    
+                #save pth file as iteration
+                #save_path = os.path.join(ckpt_dir, 'model_iteration%d.pth' %i)
+                torch.save({
+                    'net': diffusion.state_dict(),
+                    'opt': opt.state_dict(),
+                    'loss': train_loss_list
+                }, save_path)
+                print('model saved!')
 
