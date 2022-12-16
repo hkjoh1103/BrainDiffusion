@@ -2,15 +2,9 @@
 # Library
 import os
 from glob import glob
+import torchio as tio
 
 from torch.utils.data import Dataset, DataLoader
-
-import monai
-from monai.transforms import (
-    Compose, LoadImage, LoadImaged,
-    EnsureChannelFirst, ResizeWithPadOrCrop, EnsureType,
-    Resize
-)
 
 # %%
 # define Datasets class
@@ -31,30 +25,42 @@ class DataPreprocessing():
         # self.data_fn = config.data_fn
         self.data_dir = config.data_dir
         self.batch_size = config.batch_size
+        self.image_size = config.image_size
         
     def get_list(self):
         fn_list = glob(os.path.join(self.data_dir, '*_[2-3].nii*'))
-        print('get data list')
-        return sorted(fn_list[:1000])
+        fn_list = sorted(fn_list)
+        
+        subject_list = []
+        for subject in fn_list:
+            tio_subject = tio.Subject(
+                id=subject.split('/')[-1].split('_')[0],
+                flair=tio.ScalarImage(subject),
+            )
+            subject_list.append(tio_subject)
+        
+        print('torchio subject list created')
+        
+        return subject_list
     
     def get_dataset(self):
         fn_list = self.get_list()
-        print('transform dataset from data list')
+        image_size = self.image_size
 
-        transform = Compose([
-            LoadImage(image_only=True),
-            EnsureChannelFirst(),
-            Resize(spatial_size=[32,32,32]),
-            EnsureType(data_type='tensor')
+        transform = tio.Compose([
+            tio.ToCanonical(),
+            tio.Resize([image_size, image_size, image_size]),
+            tio.RescaleIntensity(out_min_max=(-1, 1)),
         ])
         
-        dataset = Datasets(transform(fn_list))
+        dataset = tio.SubjectsDataset(fn_list, transform=transform)
+        
         print('transform completed')
 
         return dataset
     
     def get_dataloader(self):
-        print('load data with transformed datasets')
         dataloader = DataLoader(self.get_dataset(), batch_size=self.batch_size, shuffle=True, num_workers=2)
         print('dataloader completed')
+        
         return dataloader

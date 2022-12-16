@@ -152,7 +152,8 @@ class Unet3D(nn.Module):
         # acquire time embedding
         if self.time_mlp is not None:
             if time is None:
-                raise ValueError("time conditioning was specified but tim is not passed")
+                # raise ValueError("time conditioning was specified but tim is not passed")
+                time = torch.randint(0, 300, (1,), device=x.device)
             
             time_emb = self.time_mlp(time)
             
@@ -278,7 +279,7 @@ class GaussianDiffusion3D(nn.Module):
             )
 
     @torch.no_grad()
-    def sample(self, batch_size, device, y=None, use_ema=True):
+    def sample(self, batch_size, device, y=None, use_ema=False):
         if y is not None and batch_size != len(y):
             raise ValueError("sample batch size different from length of given y")
 
@@ -294,7 +295,7 @@ class GaussianDiffusion3D(nn.Module):
         return x.cpu().detach()
 
     @torch.no_grad()
-    def sample_diffusion_sequence(self, batch_size, device, y=None, use_ema=True):
+    def sample_diffusion_sequence(self, batch_size, device, y=None, use_ema=False):
         if y is not None and batch_size != len(y):
             raise ValueError("sample batch size different from length of given y")
 
@@ -339,6 +340,8 @@ class GaussianDiffusion3D(nn.Module):
             raise ValueError("image height does not match diffusion parameters")
         if w != self.img_size[0]:
             raise ValueError("image width does not match diffusion parameters")
+        if d != self.img_size[0]:
+            raise ValueError("image depth does not match diffusion parameters")
         
         t = torch.randint(0, self.num_timesteps, (b,), device=device)
         return self.get_losses(x, t, y)
