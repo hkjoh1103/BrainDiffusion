@@ -22,6 +22,8 @@ from diffusion.util import *
 # %%
 def train(args):
     # define parameters from arguments
+    name = args.name
+    
     lr = args.lr
     batch_size = args.batch_size
     num_iteration = args.num_iteration
@@ -36,9 +38,10 @@ def train(args):
     time_emb_dim = args.time_emb_dim
     
     data_dir = args.data_dir
-    ckpt_dir = args.ckpt_dir
-    log_dir = args.log_dir
-    result_dir = args.result_dir
+    base_dir = f'./{name}'
+    ckpt_dir = os.path.join(base_dir, 'checkpoint')
+    log_dir = os.path.join(base_dir, 'log')
+    result_dir = os.path.join(base_dir, 'result')
     
     log_rate = args.log_rate
     save_rate = args.save_rate
@@ -50,8 +53,8 @@ def train(args):
     print('device : %s' %device)
     
     # make directories
-    if not os.path.exists(data_dir):
-        os.makedirs(data_dir)
+    if not os.path.exists(base_dir):
+        os.makedirs(base_dir)
     if not os.path.exists(ckpt_dir):
         os.makedirs(ckpt_dir)
     if not os.path.exists(log_dir):
@@ -61,7 +64,7 @@ def train(args):
     
     # data preprocessing
     data = DataPreprocessing(args)
-    dataloader = cycle(data.get_dataloader()) 
+    dataloader = data.get_dataloader()
  
     # define model & optimizer
     model = Unet3D(
@@ -148,35 +151,44 @@ def train(args):
             )
             
         
-        if i % save_rate == 0:
-            with torch.no_grad():
-                # save nii file
-                sample = diffusion.sample(batch_size, device=device, y=None, use_ema=False)
-                sample = sample[0,0,:,:,:].detach().cpu().numpy()
-                _m = image_size // 2
+    #     if i % save_rate == 0:
+    #         with torch.no_grad():
+    #             # save nii file
+    #             sample = diffusion.sample(batch_size, device=device, y=None, use_ema=False)
+    #             sample = sample[0,0,:,:,:].detach().cpu().numpy()
+    #             _m = image_size // 2
             
-                plt.imsave(os.path.join(result_dir, f"Iteration{i}_sag.png"), sample[_m,:,:], cmap='gray')
-                plt.imsave(os.path.join(result_dir, f"Iteration{i}_cor.png"), sample[:,_m,:], cmap='gray')
-                plt.imsave(os.path.join(result_dir, f"Iteration{i}_axi.png"), sample[:,:,_m], cmap='gray')
+    #             plt.imsave(os.path.join(result_dir, f"Iteration{i}_sag.png"), sample[_m,:,:], cmap='gray')
+    #             plt.imsave(os.path.join(result_dir, f"Iteration{i}_cor.png"), sample[:,_m,:], cmap='gray')
+    #             plt.imsave(os.path.join(result_dir, f"Iteration{i}_axi.png"), sample[:,:,_m], cmap='gray')
                 
-                #save one pth file
-                save_path = os.path.join(ckpt_dir, 'model_test1.pth')
+    #             #save one pth file
+    #             save_path = os.path.join(ckpt_dir, 'model_test1.pth')
     
-                #save pth file as iteration
-                #save_path = os.path.join(ckpt_dir, 'model_iteration%d.pth' %i)
-                torch.save({
-                    'net': diffusion.state_dict(),
-                    'opt': opt.state_dict(),
-                    'loss': train_loss_list
-                }, save_path)
-                print('model saved!')
+    #             #save pth file as iteration
+    #             #save_path = os.path.join(ckpt_dir, 'model_iteration%d.pth' %i)
+    #             torch.save({
+    #                 'net': diffusion.state_dict(),
+    #                 'opt': opt.state_dict(),
+    #                 'loss': train_loss_list
+    #             }, save_path)
+    #             print('model saved!')
 
-    # get sample sequence from final model
-    sample = diffusion.sample_diffusion_sequence(1, device=device)
+    # # get sample sequence from final model
+    # sample = diffusion.sample_diffusion_sequence(1, device=device)
     
-    plt.figure(figsize=(20,8))
-    for i in range(1,11):
-        plt.subplot(1,10,i)
-        plt.imshow(sample[(i-1)*(time_step)//10][0,0,:,:,image_size//2], cmap='gray')
-    plt.savefig(os.path.join(result_dir, "sample_diffusion_sequence"))
+    # plt.figure(figsize=(20,8))
+    # for i in range(1,11):
+    #     plt.subplot(1,10,i)
+    #     plt.imshow(sample[(i-1)*(time_step)//10][0,0,:,:,image_size//2], cmap='gray')
+    # plt.savefig(os.path.join(result_dir, "sample_diffusion_sequence"))
+    
+    # save loss curve
+    plt.figure(figsize=(9,9))
+    log_x = np.arange(1, num_iteration+1)
+    log_y = train_loss_list
+    plt.plot(log_x, log_y)
+    plt.savefig(os.path.join(log_dir, 'log'))
+    
+    
 # %%

@@ -3,4 +3,7 @@ datasets
 test*.py
 test*.ipynb
 checkpoint
-result
+result*
+log*
+*.pyc
+__pycache__/
