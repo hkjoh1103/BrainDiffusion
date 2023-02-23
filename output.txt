@@ -1,0 +1,24 @@
+device count: 1
+device : cuda:0
+==============================
+torchio subject list created
+transform completed
+dataloader completed
+size of dataloader : 4355
+==============================
+initial sampling time : 7.0
+/home/egyptdj/anaconda3/envs/BrainDiffusion_3.9/lib/python3.9/site-packages/torchio/transforms/preprocessing/spatial/resize.py:73: UserWarning: Output shape (64, 64, 49) != target shape (64, 64, 48). Fixing with CropOrPad
+  warnings.warn(message)
+/home/egyptdj/anaconda3/envs/BrainDiffusion_3.9/lib/python3.9/site-packages/torchio/transforms/preprocessing/spatial/resize.py:73: UserWarning: Output shape (64, 64, 49) != target shape (64, 64, 48). Fixing with CropOrPad
+  warnings.warn(message)
+Iteration 10 / 100 | loss 0.8913 | time elapsed 17.8 sec
+Iteration 20 / 100 | loss 0.4899 | time elapsed 33.2 sec
+Iteration 30 / 100 | loss 0.2765 | time elapsed 48.7 sec
+Iteration 40 / 100 | loss 0.1723 | time elapsed 64.2 sec
+Iteration 50 / 100 | loss 0.1126 | time elapsed 79.8 sec
+Iteration 60 / 100 | loss 0.1218 | time elapsed 95.3 sec
+Iteration 70 / 100 | loss 0.0786 | time elapsed 111.0 sec
+Iteration 80 / 100 | loss 0.0929 | time elapsed 127.7 sec
+Iteration 90 / 100 | loss 0.0820 | time elapsed 144.3 sec
+Iteration 100 / 100 | loss 0.0678 | time elapsed 161.1 sec
+model saved!

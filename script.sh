@@ -1,6 +1,6 @@
-CUDA_VISIBLE_DEVICES=0 nohup python3 -u main_239.py\
+CUDA_VISIBLE_DEVICES=0 nohup python3 -u main_246.py\
     --mode 'train'\
-    --name 'exp65'\
+    --name 'exp66'\
     --mri_type 'adc'\
     --age_type 'pos'\
     \
@@ -10,8 +10,8 @@ CUDA_VISIBLE_DEVICES=0 nohup python3 -u main_239.py\
     --machine_id 0\
     \
     --lr 2e-5\
-    --batch_size 16\
-    --num_iteration 6000\
+    --batch_size 8\
+    --num_iteration 12000\
     --dropout 0.1\
     \
     --time_step 300\

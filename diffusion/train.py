@@ -263,7 +263,7 @@ def train(gpu_num, args):
                     plt.imshow(generated_data[i,0,:,:,image_size[2]//2], cmap='gray')
                     plt.title('axial')
                     
-                plt.savefig(os.path.join(result_dir, f"Iteration{iteration}_sample.png"))
+                plt.savefig(os.path.join(result_dir, f"Iteration{iteration}_sample_40.png"))
                 
                 generated_data2 = diffusion.sample(4, device=device, y=60)
                 

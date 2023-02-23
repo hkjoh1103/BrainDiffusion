@@ -16,8 +16,9 @@ parser.add_argument("--mode", default="train", choices=["train", "test", "sample
 # parser.add_argument("--train_continue", default="off", choices=["on", "off"], type=str, dest="train_continue")
 parser.add_argument("--name", required=True, type=str, dest="name")
 parser.add_argument("--mri_type", default='adc', choices=['adc', 'flair', 't1'], type=str, dest="mri_type")
+parser.add_argument("--age_type", default=None, choices=['int', 'cat', 'pos'], type=str, dest="age_type")
 
-parser.add_argument("--use_multiGPU", default=False, type=bool, dest="use_multiGPU")
+parser.add_argument("--use_multiGPU", default=False, dest="use_multiGPU", action=argparse.BooleanOptionalAction)
 parser.add_argument('--num_machines', default=1, type=int, dest="num_machines")
 parser.add_argument('--num_gpu_processes', default=1, type=int, dest="num_gpu_processes")
 parser.add_argument('--machine_id', default=0, type=int, dest="machine_id")
@@ -41,7 +42,6 @@ parser.add_argument("--time_emb_dim", default=128*2, type=int, dest="time_emb_di
 parser.add_argument("--ema_decay", default=0.9999, type=float, dest="ema_decay")
 parser.add_argument("--ema_update_rate", default=1, type=int, dest="ema_update_rate")
 
-parser.add_argument("--data_dir", default="/mnt/ssd/bhkim/ukb/nifti/flair/flair", type=str, dest="data_dir")
 parser.add_argument("--patient_dir", default="./datasets/ukb.csv", type=str, dest="patient_dir")
 # parser.add_argument("--ckpt_dir", default="./checkpoint", type=str, dest="ckpt_dir")
 # parser.add_argument("--log_dir", default="./log", type=str, dest="log_dir")
@@ -60,6 +60,8 @@ elif args.mri_type == 't1':
     args.data_dir = "/mnt/hdd4/bhkim/ukb/nifti/t1"
 else:
     raise TypeError("adc, flair, t1 중에서 mri_type argument를 입력해주세요")
+
+args.patient_dir = "./datasets/ukb.csv"
 
 local_rank = args.local_rank
 
