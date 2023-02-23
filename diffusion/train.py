@@ -28,12 +28,13 @@ def train(gpu_num, args):
     # define parameters from arguments
     name = args.name
     
+    age_classes = None
+    age_positional = False
+    
     if args.age_type == 'int':
         age_classes = 100
-        age_positional = False
     elif args.age_type == 'cat':
         age_classes = 5
-        age_positional = False
     elif args.age_type == 'pos':
         age_classes = 100
         age_positional = True
@@ -212,10 +213,12 @@ def train(gpu_num, args):
     while iteration <= num_iteration:
         dataset = next(dataloader)
         data = dataset['image']['data'].to(device, non_blocking=True)
-        if args.age_type == 'int' or 'pos':
+        if args.age_type in ['int', 'pos']:
             age = dataset['age'].to(device, non_blocking=True)
         elif args.age_type == 'cat':
-            age = dataset['age_cat'].to(devce, non_blocking=True)
+            age = dataset['age_cat'].to(device, non_blocking=True)
+        else:
+            age = None
         
         loss = get_loss(model=model, x=data, y=age)
 
@@ -241,7 +244,7 @@ def train(gpu_num, args):
             with torch.no_grad():
                 # save nii file
                 model.eval()
-                generated_data = diffusion.sample(4, device=device, y=40)
+                generated_data = diffusion.sample(4, device=device, y=1)
                 
                 b,*_ = generated_data.shape
                 plt.figure(figsize=(9, 3*b))
@@ -260,7 +263,7 @@ def train(gpu_num, args):
                     
                 plt.savefig(os.path.join(result_dir, f"Iteration{iteration}_sample_age40.png"))
                 
-                generated_data2 = diffusion.sample(4, device=device, y=60)
+                generated_data2 = diffusion.sample(4, device=device, y=3)
                 
                 b,*_ = generated_data2.shape
                 plt.figure(figsize=(9, 3*b))

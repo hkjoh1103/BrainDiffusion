@@ -1,6 +1,7 @@
 # %%
 # Library
 import numpy as np
+import matplotlib.pyplot as plt
 
 import torch
 import torch.nn as nn
@@ -126,3 +127,4 @@ class GaussianDiffusion3D():
         del x, t_batch, y_batch
         
         return diffusion_sequence
+    

@@ -180,7 +180,7 @@ class ResidualBlock(nn.Module):
         dropout,
         time_emb_dim=None,
         num_classes=None,
-        age_positional=False
+        age_positional=False,
         activation=F.relu,
         norm="gn",
         num_groups=32,
@@ -220,10 +220,10 @@ class ResidualBlock(nn.Module):
             out += self.time_bias(self.activation(time_emb))[:, :, None, None, None]
 
         if self.class_bias is not None:
-            if y is None:
-                raise ValueError("class conditioning was specified but y is not passed")
-
-            out += self.class_bias(y)[:, :, None, None, None]
+            # if y is None:
+            #     raise ValueError("class conditioning was specified but y is not passed")
+            if y is not None:
+                out += self.class_bias(y)[:, :, None, None, None]
 
         out = self.activation(self.norm_2(out))
         out = self.conv_2(out) + self.residual_connection(x)

@@ -33,7 +33,7 @@ class Unet3D(nn.Module):
         time_emb_dim,
         time_emb_scale=1.0,
         num_classes=None,
-        age_positional=False
+        age_positional=False,
         activation=F.silu,
         dropout=0.1,
         attention_resolutions=(),
@@ -86,7 +86,7 @@ class Unet3D(nn.Module):
                     dropout,
                     time_emb_dim=time_emb_dim,
                     num_classes=num_classes,
-                    age_positional=age_positional
+                    age_positional=age_positional,
                     activation=activation,
                     norm=norm,
                     num_groups=num_groups,
@@ -107,7 +107,7 @@ class Unet3D(nn.Module):
                 dropout,
                 time_emb_dim=time_emb_dim,
                 num_classes=num_classes,
-                age_positional=age_positional
+                age_positional=age_positional,
                 activation=activation,
                 norm=norm,
                 num_groups=num_groups,
@@ -119,7 +119,7 @@ class Unet3D(nn.Module):
                 dropout,
                 time_emb_dim=time_emb_dim,
                 num_classes=num_classes,
-                age_positional=age_positional
+                age_positional=age_positional,
                 activation=activation,
                 norm=norm,
                 num_groups=num_groups,
@@ -137,7 +137,7 @@ class Unet3D(nn.Module):
                     dropout,
                     time_emb_dim=time_emb_dim,
                     num_classes=num_classes,
-                    age_positional=age_positional
+                    age_positional=age_positional,
                     activation=activation,
                     norm=norm,
                     num_groups=num_groups,

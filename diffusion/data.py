@@ -56,8 +56,8 @@ class DataPreprocessing():
             tio_subject = tio.Subject(
                 id=patient_id,
                 image=tio.ScalarImage(subject),
-                age=patient_age
-                age_cat=patient_age//10 - 3
+                age=patient_age,
+                age_cat=(patient_age//10 - 3),
             )
             subject_list.append(tio_subject)
         
