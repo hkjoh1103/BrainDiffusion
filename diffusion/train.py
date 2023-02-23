@@ -225,6 +225,8 @@ def train(gpu_num, args):
         opt.zero_grad()
         loss.backward()
         opt.step()
+        
+        diffusion.update_ema(iteration=iteration)
 
         train_loss_list.append(loss.item())
 
@@ -244,7 +246,7 @@ def train(gpu_num, args):
             with torch.no_grad():
                 # save nii file
                 model.eval()
-                generated_data = diffusion.sample(4, device=device, y=1)
+                generated_data = diffusion.sample(4, device=device, y=40)
                 
                 b,*_ = generated_data.shape
                 plt.figure(figsize=(9, 3*b))
@@ -261,9 +263,9 @@ def train(gpu_num, args):
                     plt.imshow(generated_data[i,0,:,:,image_size[2]//2], cmap='gray')
                     plt.title('axial')
                     
-                plt.savefig(os.path.join(result_dir, f"Iteration{iteration}_sample_age40.png"))
+                plt.savefig(os.path.join(result_dir, f"Iteration{iteration}_sample.png"))
                 
-                generated_data2 = diffusion.sample(4, device=device, y=3)
+                generated_data2 = diffusion.sample(4, device=device, y=60)
                 
                 b,*_ = generated_data2.shape
                 plt.figure(figsize=(9, 3*b))

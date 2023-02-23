@@ -2,6 +2,7 @@
 # Library
 import numpy as np
 import matplotlib.pyplot as plt
+from copy import deepcopy
 
 import torch
 import torch.nn as nn
@@ -71,6 +72,12 @@ def extract(a, t, x_shape):
 class GaussianDiffusion3D():
     def __init__(self, model, args):
         self.model = model
+        self.ema_model = deepcopy(self.model)
+        
+        self.ema = EMA(args.ema_decay)
+        self.ema_decay = args.ema_decay
+        self.ema_update_rate = args.ema_update_rate
+        self.ema_start = args.num_iteration // 2
         
         self.image_size = args.image_size
         self.time_step = args.time_step
@@ -84,23 +91,37 @@ class GaussianDiffusion3D():
         self.remove_noise_coeff = self.betas / self.sqrt_one_minus_alphas_cumprod
         self.sigma = np.sqrt(self.betas)
         
+    def update_ema(self, iteration):
+        if iteration % self.ema_update_rate == 0:
+            if iteration < self.ema_start:
+                self.ema_model.load_state_dict(self.model.state_dict())
+            else:
+                self.ema.update_model_average(self.ema_model, self.model)
+        
     @torch.no_grad()
-    def remove_noise(self, x, t, y=None):
+    def remove_noise(self, x, t, y=None, use_ema=True):
         device = x.device
         
-        return (
-            (x - extract(self.remove_noise_coeff.to(device), t, x.shape) * self.model(x, t, y)) *
-            extract(self.reciprocal_sqrt_alphas.to(device), t, x.shape)
-        )
+        if use_ema:
+            return (
+                (x - extract(self.remove_noise_coeff.to(device), t, x.shape) * self.ema_model(x, t, y)) *
+                extract(self.reciprocal_sqrt_alphas.to(device), t, x.shape)
+            )
+        
+        else:
+            return (
+                (x - extract(self.remove_noise_coeff.to(device), t, x.shape) * self.model(x, t, y)) *
+                extract(self.reciprocal_sqrt_alphas.to(device), t, x.shape)
+            )
 
     @torch.no_grad()
-    def sample(self, batch_size, device, y=None):
+    def sample(self, batch_size, device, y=None, use_ema=True):
         x = torch.randn(batch_size, 1, *self.image_size, device=device)
         
         for t in range(self.time_step - 1, -1, -1):
             t_batch = torch.tensor([t], device=device).repeat(batch_size)
             y_batch = torch.tensor([y], device=device).repeat(batch_size) if y is not None else None
-            x = self.remove_noise(x, t_batch, y_batch)
+            x = self.remove_noise(x, t_batch, y_batch, use_ema=use_ema)
 
             if t > 0:
                 x += extract(self.sigma.to(device), t_batch, x.shape) * torch.randn_like(x)
@@ -110,14 +131,14 @@ class GaussianDiffusion3D():
         return x.detach().cpu()
 
     @torch.no_grad()
-    def sample_diffusion_sequence(self, batch_size, device, y=None):
+    def sample_diffusion_sequence(self, batch_size, device, y=None, use_ema=True):
         x = torch.randn(batch_size, 1, *self.image_size, device=device)
         diffusion_sequence = [x.cpu().detach()]
         
         for t in range(self.time_step - 1, -1, -1):
             t_batch = torch.tensor([t], device=device).repeat(batch_size)
             y_batch = torch.tensor([y], device=device).repeat(batch_size) if y is not None else None
-            x = self.remove_noise(x, t_batch, y_batch)
+            x = self.remove_noise(x, t_batch, y_batch, use_ema=use_ema)
 
             if t > 0:
                 x += extract(self.sigma.to(device), t_batch, x.shape) * torch.randn_like(x)

@@ -16,7 +16,7 @@ parser.add_argument("--mode", default="train", choices=["train", "test", "sample
 # parser.add_argument("--train_continue", default="off", choices=["on", "off"], type=str, dest="train_continue")
 parser.add_argument("--name", required=True, type=str, dest="name")
 parser.add_argument("--mri_type", default='adc', choices=['adc', 'flair', 't1'], type=str, dest="mri_type")
-parser.add_argument("--age_type", default='int', choices=['int', 'cat', 'pos'], type=str, dest="age_type")
+parser.add_argument("--age_type", default=None, choices=['int', 'cat', 'pos'], type=str, dest="age_type")
 
 parser.add_argument("--use_multiGPU", default=False, dest="use_multiGPU", action=argparse.BooleanOptionalAction)
 parser.add_argument('--num_machines', default=1, type=int, dest="num_machines")

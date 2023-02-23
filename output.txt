@@ -1,9 +1,0 @@
-device count: 1
-device : cuda:0
-==============================
-torchio subject list created
-transform completed
-dataloader completed
-size of dataloader : 8710
-==============================
-initial sampling time : 9.5

@@ -166,11 +166,13 @@ class Unet3D(nn.Module):
             time_emb = None
                     
         # check conditioning parameter is available
-        if self.num_classes is not None and y is None:
-            raise ValueError("class conditioning was specified but y is not passed")
-        
-        if self.age_mlp is not None:
-            y = self.age_mlp(y)
+        if y is not None:
+            if self.num_classes is None:
+                raise ValueError("class conditioning is not specified but y is passed")
+            if self.age_mlp is not None:
+                y = self.age_mlp(y)
+        # if self.num_classes is not None and y is None:
+        #     raise ValueError("class conditioning was specified but y is not passed")
 
         # x = (N, 1, H, W, D)
         x = self.init_conv(x)

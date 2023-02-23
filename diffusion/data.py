@@ -32,6 +32,13 @@ class DataPreprocessing():
         self.batch_size = config.batch_size
         self.image_size = config.image_size
         
+        if config.mri_type == 'adc':
+            self.crop_size = (104,104,72)
+        elif config.mri_type == 'flair':
+            self.crop_size = (180,240,200)
+        elif config.mri_type == 't1':
+            self.crop_size = (180,240,200)
+        
         self.use_multiGPU = config.use_multiGPU
         self.rank=rank
         self.world_size=world_size
@@ -67,12 +74,15 @@ class DataPreprocessing():
     
     def get_dataset(self):
         fn_list = self.get_list()
-        image_size = self.image_size
 
         transform = tio.Compose([
             tio.ToCanonical(),
-            tio.Resize(image_size),
+            tio.CropOrPad(self.crop_size, padding_mode=0),
+            tio.Resize(self.image_size),
             tio.RescaleIntensity(out_min_max=(-1, 1)),
+            tio.RandomFlip(axes='lr',flip_probability=0.2),
+            tio.RandomAffine(degrees=(3,3,3), translation=(5,5,5), default_pad_value='otsu'),
+            tio.RandomElasticDeformation(num_control_points=6, max_displacement=4)
         ])
         
         dataset = tio.SubjectsDataset(fn_list, transform=transform)
