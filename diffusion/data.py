@@ -3,7 +3,9 @@
 import os
 from glob import glob
 import torchio as tio
+import pandas as pd
 
+import torch
 from torch.utils.data import Dataset, DataLoader
 
 # %%
@@ -21,21 +23,41 @@ class Datasets(Dataset):
 # %%
 # define DataPreprocessing class
 class DataPreprocessing():
-    def __init__(self, config):
+    def __init__(self, config, rank=1, world_size=1):
         # self.data_fn = config.data_fn
         self.data_dir = config.data_dir
+        self.data_type = self.data_dir.split('/')[-1]
+        self.patient_dir = config.patient_dir
+        
         self.batch_size = config.batch_size
         self.image_size = config.image_size
         
+        self.use_multiGPU = config.use_multiGPU
+        self.rank=rank
+        self.world_size=world_size
+        
     def get_list(self):
-        fn_list = glob(os.path.join(self.data_dir, '*_[2-3].nii*'))
+        if self.data_type == 'flair':
+            file_name = '*_[2-3].nii*'
+        elif self.data_type == 't1':
+            file_name = '*_[2-3].nii*'
+        elif self.data_type == 'dti_md':
+            file_name = '*.nii*'
+
+        fn_list = glob(os.path.join(self.data_dir, file_name))
         fn_list = sorted(fn_list)
+        
+        data_pt = pd.read_csv(self.patient_dir, encoding='utf-8', header=0, index_col=0, usecols=['eid', '21022-0.0']).dropna(axis=0)
         
         subject_list = []
         for subject in fn_list:
+            patient_id = subject.split('/')[-1].split('_')[0]
+            patient_age = data_pt.loc[int(patient_id)]['21022-0.0'].astype(int)
             tio_subject = tio.Subject(
-                id=subject.split('/')[-1].split('_')[0],
-                flair=tio.ScalarImage(subject),
+                id=patient_id,
+                image=tio.ScalarImage(subject),
+                age=patient_age
+                age_cat=patient_age//10 - 3
             )
             subject_list.append(tio_subject)
         
@@ -49,18 +71,44 @@ class DataPreprocessing():
 
         transform = tio.Compose([
             tio.ToCanonical(),
-            tio.Resize([image_size, image_size, image_size]),
+            tio.Resize(image_size),
             tio.RescaleIntensity(out_min_max=(-1, 1)),
         ])
         
         dataset = tio.SubjectsDataset(fn_list, transform=transform)
-        
         print('transform completed')
+        
+        if self.use_multiGPU:
+            sampler = torch.utils.data.DistributedSampler(
+                dataset,
+                num_replicas=self.world_size,
+                rank=self.rank
+            )
+            return dataset, sampler
 
-        return dataset
+        else:
+            return dataset
     
     def get_dataloader(self):
-        dataloader = DataLoader(self.get_dataset(), batch_size=self.batch_size, shuffle=True, num_workers=2)
+        if self.use_multiGPU:
+            dataset, sampler = self.get_dataset()
+            dataloader = DataLoader(
+                dataset,
+                batch_size=self.batch_size,
+                shuffle=False,
+                num_workers=0,
+                pin_memory=True,
+                sampler=sampler
+            )
+            
+        else:
+            dataset = self.get_dataset()
+            dataloader = DataLoader(
+                dataset,
+                batch_size=self.batch_size,
+                shuffle=True,
+                num_workers=2
+            )
         print('dataloader completed')
         
         return dataloader

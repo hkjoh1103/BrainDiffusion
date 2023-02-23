@@ -66,3 +66,63 @@ def extract(a, t, x_shape):
     b, *_ = t.shape
     out = a.gather(-1, t)
     return out.reshape(b, *((1,) * (len(x_shape) - 1)))
+
+class GaussianDiffusion3D():
+    def __init__(self, model, args):
+        self.model = model
+        
+        self.image_size = args.image_size
+        self.time_step = args.time_step
+        
+        self.betas = torch.tensor(get_schedule(args, s=0.008)).type(torch.FloatTensor)
+        self.alphas = 1.0 - self.betas
+        self.alphas_cumprod = np.cumprod(self.alphas)
+        self.sqrt_alphas_cumprod = np.sqrt(self.alphas_cumprod)
+        self.sqrt_one_minus_alphas_cumprod = np.sqrt(1 - self.alphas_cumprod)
+        self.reciprocal_sqrt_alphas = np.sqrt(1 / self.alphas)
+        self.remove_noise_coeff = self.betas / self.sqrt_one_minus_alphas_cumprod
+        self.sigma = np.sqrt(self.betas)
+        
+    @torch.no_grad()
+    def remove_noise(self, x, t, y=None):
+        device = x.device
+        
+        return (
+            (x - extract(self.remove_noise_coeff.to(device), t, x.shape) * self.model(x, t, y)) *
+            extract(self.reciprocal_sqrt_alphas.to(device), t, x.shape)
+        )
+
+    @torch.no_grad()
+    def sample(self, batch_size, device, y=None):
+        x = torch.randn(batch_size, 1, *self.image_size, device=device)
+        
+        for t in range(self.time_step - 1, -1, -1):
+            t_batch = torch.tensor([t], device=device).repeat(batch_size)
+            y_batch = torch.tensor([y], device=device).repeat(batch_size) if y is not None else None
+            x = self.remove_noise(x, t_batch, y_batch)
+
+            if t > 0:
+                x += extract(self.sigma.to(device), t_batch, x.shape) * torch.randn_like(x)
+        
+        del t_batch, y_batch
+        
+        return x.detach().cpu()
+
+    @torch.no_grad()
+    def sample_diffusion_sequence(self, batch_size, device, y=None):
+        x = torch.randn(batch_size, 1, *self.image_size, device=device)
+        diffusion_sequence = [x.cpu().detach()]
+        
+        for t in range(self.time_step - 1, -1, -1):
+            t_batch = torch.tensor([t], device=device).repeat(batch_size)
+            y_batch = torch.tensor([y], device=device).repeat(batch_size) if y is not None else None
+            x = self.remove_noise(x, t_batch, y_batch)
+
+            if t > 0:
+                x += extract(self.sigma.to(device), t_batch, x.shape) * torch.randn_like(x)
+            
+            diffusion_sequence.append(x.cpu().detach())
+        
+        del x, t_batch, y_batch
+        
+        return diffusion_sequence

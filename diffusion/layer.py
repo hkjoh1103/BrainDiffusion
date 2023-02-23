@@ -92,7 +92,7 @@ class Upsample(nn.Module):
         return self.upsample(x)
 
 
-class AttentionBlock(nn.Module):
+class AttentionBlock(nn.Module): #Previous module
     __doc__ = r"""Applies QKV self-attention with a residual connection.
     
     Input:
@@ -116,9 +116,9 @@ class AttentionBlock(nn.Module):
         b, c, h, w, d = x.shape
         q, k, v = torch.split(self.to_qkv(self.norm(x)), self.in_channels, dim=1)
 
-        q = q.permute(0, 2, 3, 4, 1).view(b, h * w * d, c)
+        q = q.permute(0, 2, 3, 4, 1).contiguous().view(b, h * w * d, c)
         k = k.view(b, c, h * w * d)
-        v = v.permute(0, 2, 3, 4, 1).view(b, h * w * d, c)
+        v = v.permute(0, 2, 3, 4, 1).contiguous().view(b, h * w * d, c)
 
         dot_products = torch.bmm(q, k) * (c ** (-0.5))
         assert dot_products.shape == (b, h * w * d, h * w * d)
@@ -126,9 +126,31 @@ class AttentionBlock(nn.Module):
         attention = torch.softmax(dot_products, dim=-1)
         out = torch.bmm(attention, v)
         assert out.shape == (b, h * w * d, c)
-        out = out.view(b, h, w, d, c).permute(0, 4, 1, 2, 3)
+        out = out.view(b, h, w, d, c).permute(0, 4, 1, 2, 3).contiguous()
 
         return self.to_out(out) + x
+    
+class AttentionBlock2(nn.Module):
+    __doc__ = r"""
+    Applies QKV self-attention with a residual connection
+    
+    Input:
+        x: tensor (N, in_channels, H, W, D)
+
+    Output:
+        tensor (N, in_channels, H, W, D)
+    Args:
+        in_channels (int): number of input channels
+        norm (string or None): which normalization to use (instance, group, batch, or none). Default: "gn"
+        num_groups (int): number of groups used in group normalization. Default: 32
+    """
+    def __init__(self, in_channels, norm="gn", num_groups=32):
+        super().__init__()
+        
+        self.in_channels = in_channels
+        self.norm = get_norm(norm, in_channels, num_groups)
+        self.to_qkv = nn.Conv3d(in_channels, in_channels * 3, 1)
+        self.to_out = nn.Conv3d(in_channels, in_channels, 1) 
 
 
 class ResidualBlock(nn.Module):
@@ -158,6 +180,7 @@ class ResidualBlock(nn.Module):
         dropout,
         time_emb_dim=None,
         num_classes=None,
+        age_positional=False
         activation=F.relu,
         norm="gn",
         num_groups=32,
@@ -177,10 +200,15 @@ class ResidualBlock(nn.Module):
         )
 
         self.time_bias = nn.Linear(time_emb_dim, out_channels) if time_emb_dim is not None else None
-        self.class_bias = nn.Embedding(num_classes, out_channels) if num_classes is not None else None
+        
+        if age_positional:
+            self.class_bias = nn.Linear(time_emb_dim, out_channels)
+        else:
+            self.class_bias = nn.Embedding(num_classes, out_channels) if num_classes is not None else None
 
         self.residual_connection = nn.Conv3d(in_channels, out_channels, 1) if in_channels != out_channels else nn.Identity()
-        self.attention = nn.Identity() if not use_attention else AttentionBlock(out_channels, norm, num_groups)
+        self.attention = AttentionBlock(out_channels, norm, num_groups)
+        self.use_attention = use_attention
     
     def forward(self, x, time_emb=None, y=None):
         out = self.activation(self.norm_1(x))
@@ -199,6 +227,8 @@ class ResidualBlock(nn.Module):
 
         out = self.activation(self.norm_2(out))
         out = self.conv_2(out) + self.residual_connection(x)
-        out = self.attention(out)
+        
+        if self.use_attention:
+            out = self.attention(out)
 
         return out

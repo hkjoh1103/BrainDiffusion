@@ -5,6 +5,7 @@ import time
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
+from functools import partial
 
 import torchio as tio
 import monai
@@ -13,6 +14,9 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 import torch.optim as optim
+from torch.nn.parallel import DistributedDataParallel as DDP
+import torch.distributed as dist
+from torchsummary import summary
 
 from diffusion.data import DataPreprocessing
 from diffusion.model import Unet3D, GaussianDiffusion3D
@@ -20,10 +24,24 @@ from diffusion.function import *
 from diffusion.util import *
 
 # %%
-def train(args):
+def train(gpu_num, args):
     # define parameters from arguments
     name = args.name
     
+    if args.age_type == 'int':
+        age_classes = 100
+        age_positional = False
+    elif args.age_type == 'cat':
+        age_classes = 5
+        age_positional = False
+    elif args.age_type == 'pos':
+        age_classes = 100
+        age_positional = True
+    
+    use_multiGPU = args.use_multiGPU
+    rank = args.machine_id * args.num_gpu_processes + gpu_num
+    world_size = args.num_gpu_processes * args.num_machines
+
     lr = args.lr
     batch_size = args.batch_size
     num_iteration = args.num_iteration
@@ -38,7 +56,7 @@ def train(args):
     time_emb_dim = args.time_emb_dim
     
     data_dir = args.data_dir
-    base_dir = f'./{name}'
+    base_dir = f'./experiment/{name}'
     ckpt_dir = os.path.join(base_dir, 'checkpoint')
     log_dir = os.path.join(base_dir, 'log')
     result_dir = os.path.join(base_dir, 'result')
@@ -46,11 +64,16 @@ def train(args):
     log_rate = args.log_rate
     save_rate = args.save_rate
     
+    if use_multiGPU:
+        dist.init_process_group(backend='nccl', world_size=world_size, rank=rank)
+    
     print('device count: %d' %(torch.cuda.device_count()))
     
-    device = torch.device("cuda") if torch.cuda.is_available() else torch.device("cpu")
+    torch.cuda.set_device(gpu_num)
+    device = torch.device(gpu_num) if torch.cuda.is_available() else torch.device("cpu")
     
     print('device : %s' %device)
+    print('='*30)
     
     # make directories
     if not os.path.exists(base_dir):
@@ -63,8 +86,12 @@ def train(args):
         os.makedirs(result_dir)    
     
     # data preprocessing
-    data = DataPreprocessing(args)
+    time_before = time.time()
+    data = DataPreprocessing(args, rank=rank, world_size=world_size)
+    
     dataloader = data.get_dataloader()
+    print('size of dataloader : %d' %(len(dataloader)))
+    dataloader = cycle(dataloader)
  
     # define model & optimizer
     model = Unet3D(
@@ -73,25 +100,24 @@ def train(args):
         channel_mults,
         num_res_blocks,
         time_emb_dim,
+        num_classes=age_classes,
+        age_positional=age_positional,
     )
+    
+    # print(summary(model, input_size=((1, *image_size),1,1), device='cpu'))
     
     betas = get_schedule(args, s=0.008)
     
-    diffusion = GaussianDiffusion3D(
-        model,
-        (image_size, image_size, image_size),
-        1,
-        None,
-        betas,
-    )
-    
-    opt = optim.Adam(diffusion.parameters(), lr=lr)
-    
     # check sample image and noise sequence
     x = next(dataloader)
-    sample_data = x['flair']['data'][0, 0, :, :, :]
+    sample_data = x['image']['data'][0, 0, :, :, :]
     
-    plt.imsave(os.path.join(result_dir, "sample.png"), sample_data[:, :, image_size//2], cmap='gray')
+    plt.figure(figsize=(15,6))
+    sample_subject = tio.Subject(
+        id=x['id'][0],
+        image=tio.ScalarImage(tensor=x['image']['data'][0])
+    )
+    sample_subject.plot(show=False, output_path=os.path.join(result_dir, "sample_subject.png"))
 
     sample_sequence = [sample_data]
     
@@ -106,13 +132,56 @@ def train(args):
         sample_data = c1 * sample_data + c2 * noise
         
         sample_sequence.append(sample_data)
-        
+    
     plt.figure(figsize=(20,8))
     for i in range(1, 11):
         plt.subplot(1,10,i)
-        plt.imshow(sample_sequence[(i-1)*(time_step)//10][:, :, image_size//2], cmap='gray')
+        plt.imshow(sample_sequence[(i-1)*(time_step)//10][:, :, image_size[2]//2], cmap='gray')
     plt.savefig(os.path.join(result_dir, "sample_noise_sequence.png"))
     
+    print('='*30)
+    print('initial sampling time : %.1f' %(time.time() - time_before))
+    
+    # define variables related to diffusion process
+    to_torch = partial(torch.tensor, dtype=torch.float32)
+    
+    betas = to_torch(betas)
+    alphas = 1.0 - betas
+    alphas_cumprod = np.cumprod(alphas)
+    sqrt_alphas_cumprod = np.sqrt(alphas_cumprod)
+    sqrt_one_minus_alphas_cumprod = np.sqrt(1 - alphas_cumprod)
+    reciprocal_sqrt_alphas = np.sqrt(1 / alphas)
+    remove_noise_coeff = betas / np.sqrt(1 - alphas_cumprod)
+    sigma = np.sqrt(betas)
+
+    def get_loss(model, x, y=None):
+        b, c, h, w, d = x.shape
+        device = x.device
+        
+        if h != image_size[0]:
+            raise ValueError("image height does not match diffusion parameters")
+        if w != image_size[1]:
+            raise ValueError("image width does not match diffusion parameters")
+        if d != image_size[2]:
+            raise ValueError("image depth does not match diffusion parameters")
+        
+        # random creation of time step
+        t = torch.randint(0, time_step, (b,), device=device)
+        
+        # gaussian noise generation
+        noise = torch.randn_like(x)
+        
+        # x_t = noised x at (t+1) time step
+        x_t = extract(sqrt_alphas_cumprod.to(device), t, x.shape) * x + \
+            extract(sqrt_one_minus_alphas_cumprod.to(device), t, x.shape) * noise
+        
+        # noise estimation
+        estimated_noise = model(x_t, t, y)
+
+        loss = F.mse_loss(estimated_noise, noise)
+            
+        return loss
+        
     # load save files
     # ckpt_list = sorted(os.listdir(ckpt_dir))
     # if ckpt_list:
@@ -128,67 +197,129 @@ def train(args):
 
         
     # train loop
-    diffusion = diffusion.cuda()
-    train_loss_list = []
-    
-    for i in range(1, num_iteration+1):
-        data = next(dataloader)['flair']['data'].cuda()
+    model.to(device)   
+    if use_multiGPU:
+        model = DDP(model, device_ids=[gpu_num], find_unused_parameters=True)
         
-        loss = diffusion(data)
+    diffusion = GaussianDiffusion3D(model, args)
+    opt = optim.Adam(model.parameters(), lr=lr)
+    
+    model.train()
+    train_loss_list = []
+    iteration = 1
+    time_start = time.time()
+    
+    while iteration <= num_iteration:
+        dataset = next(dataloader)
+        data = dataset['image']['data'].to(device, non_blocking=True)
+        if args.age_type == 'int' or 'pos':
+            age = dataset['age'].to(device, non_blocking=True)
+        elif args.age_type == 'cat':
+            age = dataset['age_cat'].to(devce, non_blocking=True)
+        
+        loss = get_loss(model=model, x=data, y=age)
 
         opt.zero_grad()
         loss.backward()
         opt.step()
-        
+
         train_loss_list.append(loss.item())
 
         
-        if i % log_rate == 0:
+        if (iteration) % log_rate == 0 and rank == 0:
             # calculate running loss
             
-            print("Iteration %d / %d | loss %.4f"
-                  %(i, num_iteration, np.mean(train_loss_list[-log_rate:]))
+            print("Iteration %d / %d | loss %.4f | time elapsed %.1f sec"
+                  %(iteration,
+                    num_iteration,
+                    np.mean(train_loss_list[-log_rate:]),
+                    time.time() - time_start)
             )
             
         
-    #     if i % save_rate == 0:
-    #         with torch.no_grad():
-    #             # save nii file
-    #             sample = diffusion.sample(batch_size, device=device, y=None, use_ema=False)
-    #             sample = sample[0,0,:,:,:].detach().cpu().numpy()
-    #             _m = image_size // 2
-            
-    #             plt.imsave(os.path.join(result_dir, f"Iteration{i}_sag.png"), sample[_m,:,:], cmap='gray')
-    #             plt.imsave(os.path.join(result_dir, f"Iteration{i}_cor.png"), sample[:,_m,:], cmap='gray')
-    #             plt.imsave(os.path.join(result_dir, f"Iteration{i}_axi.png"), sample[:,:,_m], cmap='gray')
+        if (iteration) % save_rate == 0 and rank == 0:
+            with torch.no_grad():
+                # save nii file
+                model.eval()
+                generated_data = diffusion.sample(4, device=device, y=40)
                 
-    #             #save one pth file
-    #             save_path = os.path.join(ckpt_dir, 'model_test1.pth')
+                b,*_ = generated_data.shape
+                plt.figure(figsize=(9, 3*b))
+                for i in range(b):
+                    plt.subplot(b, 3, 3*i + 1)
+                    plt.imshow(generated_data[i,0,image_size[0]//2,:,:], cmap='gray')
+                    plt.title('sagital')
+                    
+                    plt.subplot(b, 3, 3*i + 2)
+                    plt.imshow(generated_data[i,0,:,image_size[1]//2,:], cmap='gray')
+                    plt.title('coronal')
+                    
+                    plt.subplot(b, 3, 3*i + 3)
+                    plt.imshow(generated_data[i,0,:,:,image_size[2]//2], cmap='gray')
+                    plt.title('axial')
+                    
+                plt.savefig(os.path.join(result_dir, f"Iteration{iteration}_sample_age40.png"))
+                
+                generated_data2 = diffusion.sample(4, device=device, y=60)
+                
+                b,*_ = generated_data2.shape
+                plt.figure(figsize=(9, 3*b))
+                for i in range(b):
+                    plt.subplot(b, 3, 3*i + 1)
+                    plt.imshow(generated_data2[i,0,image_size[0]//2,:,:], cmap='gray')
+                    plt.title('sagital')
+                    
+                    plt.subplot(b, 3, 3*i + 2)
+                    plt.imshow(generated_data2[i,0,:,image_size[1]//2,:], cmap='gray')
+                    plt.title('coronal')
+                    
+                    plt.subplot(b, 3, 3*i + 3)
+                    plt.imshow(generated_data2[i,0,:,:,image_size[2]//2], cmap='gray')
+                    plt.title('axial')
+                    
+                plt.savefig(os.path.join(result_dir, f"Iteration{iteration}_sample_age60.png"))
+                
+                #save one pth file
+                save_path = os.path.join(ckpt_dir, 'model_test1.pth')
     
-    #             #save pth file as iteration
-    #             #save_path = os.path.join(ckpt_dir, 'model_iteration%d.pth' %i)
-    #             torch.save({
-    #                 'net': diffusion.state_dict(),
-    #                 'opt': opt.state_dict(),
-    #                 'loss': train_loss_list
-    #             }, save_path)
-    #             print('model saved!')
-
-    # # get sample sequence from final model
-    # sample = diffusion.sample_diffusion_sequence(1, device=device)
+                #save pth file as iteration
+                #save_path = os.path.join(ckpt_dir, 'model_iteration%d.pth' %i)
+                torch.save({
+                    'net': model.state_dict(),
+                    'opt': opt.state_dict(),
+                    'loss': train_loss_list
+                }, save_path)
+                print('model saved!')
+                model.train()
+        
+        del data, loss
+        torch.cuda.empty_cache()
+        iteration += 1
     
-    # plt.figure(figsize=(20,8))
-    # for i in range(1,11):
-    #     plt.subplot(1,10,i)
-    #     plt.imshow(sample[(i-1)*(time_step)//10][0,0,:,:,image_size//2], cmap='gray')
-    # plt.savefig(os.path.join(result_dir, "sample_diffusion_sequence"))
+    with torch.no_grad():
+        # get sample sequence from final model
+        model.eval()
+        generated_sequence = diffusion.sample_diffusion_sequence(4, device=device)
+        b,*_ = generated_sequence[0].shape
+        
+        plt.figure(figsize=(30,3*b))
+        for i in range(b):
+            for j in range(1,11):
+                plt.subplot(b,11,11*i + j)
+                plt.imshow(generated_sequence[(j-1)*(time_step)//10][i,0,:,:,image_size[2]//2], cmap='gray')
+            plt.subplot(b,11,11*i + 11)
+            plt.imshow(generated_sequence[-1][i,0,:,:,image_size[2]//2], cmap='gray')
+        
+        if rank == 0:
+            plt.savefig(os.path.join(result_dir, "sample_diffusion_sequence"))
+        
+        # save loss curve
+        plt.figure(figsize=(9,9))
+        log_x = np.arange(0, num_iteration, 10)
+        log_y = [np.mean(train_loss_list[i:i+10]) for i in log_x]
+        plt.plot(log_x, log_y)
+        if rank == 0:
+            plt.savefig(os.path.join(log_dir, 'log'))
     
-    # save loss curve
-    plt.figure(figsize=(9,9))
-    log_x = np.arange(1, num_iteration+1)
-    log_y = train_loss_list
-    plt.plot(log_x, log_y)
-    plt.savefig(os.path.join(log_dir, 'log'))
-    
-    
+        
 # %%

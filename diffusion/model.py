@@ -33,12 +33,12 @@ class Unet3D(nn.Module):
         time_emb_dim,
         time_emb_scale=1.0,
         num_classes=None,
+        age_positional=False
         activation=F.silu,
         dropout=0.1,
-        attention_resolutions=(1,),
+        attention_resolutions=(),
         norm='gn',
         num_groups=32,
-        initial_pad=0,
     ):
         super().__init__()
         
@@ -47,7 +47,6 @@ class Unet3D(nn.Module):
         self.base_channels = base_channels
         self.num_classes = num_classes
         self.activation = activation
-        self.initial_pad = initial_pad
         
         # define time embeding layer
         self.time_mlp = nn.Sequential(
@@ -56,6 +55,13 @@ class Unet3D(nn.Module):
             nn.SiLU(),
             nn.Linear(time_emb_dim, time_emb_dim),
         ) if time_emb_dim is not None else None
+        
+        self.age_mlp = nn.Sequential(
+            PositionalEmbedding(base_channels, scale=1.0),
+            nn.Linear(base_channels, time_emb_dim),
+            nn.SiLU(),
+            nn.Linear(time_emb_dim, time_emb_dim),
+        ) if age_positional else None
         
         # define initnial 3D convolutional layer
         self.init_conv = nn.Conv3d(in_channels, base_channels, 3, padding=1)
@@ -80,6 +86,7 @@ class Unet3D(nn.Module):
                     dropout,
                     time_emb_dim=time_emb_dim,
                     num_classes=num_classes,
+                    age_positional=age_positional
                     activation=activation,
                     norm=norm,
                     num_groups=num_groups,
@@ -100,6 +107,7 @@ class Unet3D(nn.Module):
                 dropout,
                 time_emb_dim=time_emb_dim,
                 num_classes=num_classes,
+                age_positional=age_positional
                 activation=activation,
                 norm=norm,
                 num_groups=num_groups,
@@ -111,6 +119,7 @@ class Unet3D(nn.Module):
                 dropout,
                 time_emb_dim=time_emb_dim,
                 num_classes=num_classes,
+                age_positional=age_positional
                 activation=activation,
                 norm=norm,
                 num_groups=num_groups,
@@ -128,6 +137,7 @@ class Unet3D(nn.Module):
                     dropout,
                     time_emb_dim=time_emb_dim,
                     num_classes=num_classes,
+                    age_positional=age_positional
                     activation=activation,
                     norm=norm,
                     num_groups=num_groups,
@@ -144,11 +154,6 @@ class Unet3D(nn.Module):
         self.out_conv = nn.Conv3d(base_channels, in_channels, 3, padding=1)
         
     def forward(self, x, time=None, y=None):
-        # apply padding
-        ip = self.initial_pad
-        if ip != 0:
-            x = F.pad(x, (ip,) * 6)
-        
         # acquire time embedding
         if self.time_mlp is not None:
             if time is None:
@@ -159,11 +164,14 @@ class Unet3D(nn.Module):
             
         else:
             time_emb = None
-        
+                    
         # check conditioning parameter is available
         if self.num_classes is not None and y is None:
             raise ValueError("class conditioning was specified but y is not passed")
         
+        if self.age_mlp is not None:
+            y = self.age_mlp(y)
+
         # x = (N, 1, H, W, D)
         x = self.init_conv(x)
         
@@ -172,179 +180,170 @@ class Unet3D(nn.Module):
         for layer in self.downs:
             x = layer(x, time_emb, y)
             skips.append(x)
-            
+ 
         for layer in self.mid:
             x = layer(x, time_emb, y)
-            
+   
         for layer in self.ups:
             if isinstance(layer, ResidualBlock):
                 x = torch.cat([x, skips.pop()], dim=1)
             x = layer(x, time_emb, y)
-            
+
         x = self.activation(self.out_norm(x))
         x = self.out_conv(x)
         
-        if ip != 0:
-            return x[:, :, ip:-ip, ip:-ip, ip:-ip]
-        else:
-            return x
+        return x
 
 
-class GaussianDiffusion3D(nn.Module):
-    __doc__ = r"""Gaussian Diffusion model. Forwarding through the module returns diffusion reversal scalar loss tensor.
+# class GaussianDiffusion3D(nn.Module):
+#     __doc__ = r"""Gaussian Diffusion model. Forwarding through the module returns diffusion reversal scalar loss tensor.
 
-    Input:
-        x: tensor of shape (N, img_channels, H, W, D)
-        y: tensor of shape (N)
-    Output:
-        scalar loss tensor
-    Args:
-        model (nn.Module): model which estimates diffusion noise
-        img_size (tuple): image size tuple (H, W)
-        img_channels (int): number of image channels
-        betas (np.ndarray): numpy array of diffusion betas
-        loss_type (string): loss type, "l1" or "l2"
-        ema_decay (float): model weights exponential moving average decay
-        ema_start (int): number of steps before EMA
-        ema_update_rate (int): number of steps before each EMA update
-    """
-    def __init__(
-        self,
-        model,
-        img_size,
-        img_channels,
-        num_classes,
-        betas,
-        loss_type="l2",
-        ema_decay=0.9999,
-        ema_start=5000,
-        ema_update_rate=1,
-    ):
-        super().__init__()
+#     Input:
+#         x: tensor of shape (N, img_channels, H, W, D)
+#         y: tensor of shape (N)
+#     Output:
+#         scalar loss tensor
+#     Args:
+#         model (nn.Module): model which estimates diffusion noise
+#         img_size (tuple): image size tuple (H, W)
+#         img_channels (int): number of image channels
+#         betas (np.ndarray): numpy array of diffusion betas
+#         loss_type (string): loss type, "l1" or "l2"
+#         ema_decay (float): model weights exponential moving average decay
+#         ema_start (int): number of steps before EMA
+#         ema_update_rate (int): number of steps before each EMA update
+#     """
+#     def __init__(
+#         self,
+#         model,
+#         img_size,
+#         img_channels,
+#         num_classes,
+#         betas,
+#         loss_type="l2",
+#         ema_decay=0.9999,
+#         ema_start=5000,
+#         ema_update_rate=1,
+#     ):
+#         super().__init__()
 
-        self.model = model
-        self.ema_model = deepcopy(model)
+#         self.model = model
+#         '''
+#         # variables for EMA model
+#         self.ema_model = deepcopy(model)
+#         self.ema = EMA(ema_decay)
+#         self.ema_decay = ema_decay
+#         self.ema_start = ema_start
+#         self.ema_update_rate = ema_update_rate
+#         self.step = 0
+#         '''
 
-        self.ema = EMA(ema_decay)
-        self.ema_decay = ema_decay
-        self.ema_start = ema_start
-        self.ema_update_rate = ema_update_rate
-        self.step = 0
+#         self.img_size = img_size
+#         self.img_channels = img_channels
+#         self.num_classes = num_classes
 
-        self.img_size = img_size
-        self.img_channels = img_channels
-        self.num_classes = num_classes
+#         if loss_type not in ["l1", "l2"]:
+#             raise ValueError("__init__() got unknown loss type")
 
-        if loss_type not in ["l1", "l2"]:
-            raise ValueError("__init__() got unknown loss type")
+#         self.loss_type = loss_type
+#         self.num_timesteps = len(betas)
 
-        self.loss_type = loss_type
-        self.num_timesteps = len(betas)
+#         alphas = 1.0 - betas
+#         alphas_cumprod = np.cumprod(alphas)
 
-        alphas = 1.0 - betas
-        alphas_cumprod = np.cumprod(alphas)
+#         to_torch = partial(torch.tensor, dtype=torch.float32)
 
-        to_torch = partial(torch.tensor, dtype=torch.float32)
+#         self.register_buffer("betas", to_torch(betas))
+#         self.register_buffer("alphas", to_torch(alphas))
+#         self.register_buffer("alphas_cumprod", to_torch(alphas_cumprod))
 
-        self.register_buffer("betas", to_torch(betas))
-        self.register_buffer("alphas", to_torch(alphas))
-        self.register_buffer("alphas_cumprod", to_torch(alphas_cumprod))
+#         self.register_buffer("sqrt_alphas_cumprod", to_torch(np.sqrt(alphas_cumprod)))
+#         self.register_buffer("sqrt_one_minus_alphas_cumprod", to_torch(np.sqrt(1 - alphas_cumprod)))
+#         self.register_buffer("reciprocal_sqrt_alphas", to_torch(np.sqrt(1 / alphas)))
 
-        self.register_buffer("sqrt_alphas_cumprod", to_torch(np.sqrt(alphas_cumprod)))
-        self.register_buffer("sqrt_one_minus_alphas_cumprod", to_torch(np.sqrt(1 - alphas_cumprod)))
-        self.register_buffer("reciprocal_sqrt_alphas", to_torch(np.sqrt(1 / alphas)))
+#         self.register_buffer("remove_noise_coeff", to_torch(betas / np.sqrt(1 - alphas_cumprod)))
+#         self.register_buffer("sigma", to_torch(np.sqrt(betas)))
 
-        self.register_buffer("remove_noise_coeff", to_torch(betas / np.sqrt(1 - alphas_cumprod)))
-        self.register_buffer("sigma", to_torch(np.sqrt(betas)))
+#     '''
+#     def update_ema(self):
+#         self.step += 1
+#         if self.step % self.ema_update_rate == 0:
+#             if self.step < self.ema_start:
+#                 self.ema_model.load_state_dict(self.model.state_dict())
+#             else:
+#                 self.ema.update_model_average(self.ema_model, self.model)
+#     '''
 
-    def update_ema(self):
-        self.step += 1
-        if self.step % self.ema_update_rate == 0:
-            if self.step < self.ema_start:
-                self.ema_model.load_state_dict(self.model.state_dict())
-            else:
-                self.ema.update_model_average(self.ema_model, self.model)
 
-    @torch.no_grad()
-    def remove_noise(self, x, t, y, use_ema=True):
-        if use_ema:
-            return (
-                (x - extract(self.remove_noise_coeff, t, x.shape) * self.ema_model(x, t, y)) *
-                extract(self.reciprocal_sqrt_alphas, t, x.shape)
-            )
-        else:
-            return (
-                (x - extract(self.remove_noise_coeff, t, x.shape) * self.model(x, t, y)) *
-                extract(self.reciprocal_sqrt_alphas, t, x.shape)
-            )
+#     @torch.no_grad()
+#     def remove_noise(self, x, t, y):
+#         return (
+#             (x - extract(self.remove_noise_coeff, t, x.shape) * self.model(x, t, y)) *
+#             extract(self.reciprocal_sqrt_alphas, t, x.shape)
+#         )
 
-    @torch.no_grad()
-    def sample(self, batch_size, device, y=None, use_ema=False):
-        if y is not None and batch_size != len(y):
-            raise ValueError("sample batch size different from length of given y")
+#     @torch.no_grad()
+#     def sample(self, batch_size, device, y=None):
+#         if y is not None and batch_size != len(y):
+#             raise ValueError("sample batch size different from length of given y")
 
-        x = torch.randn(batch_size, self.img_channels, *self.img_size, device=device)
+#         x = torch.randn(batch_size, self.img_channels, *self.img_size, device=device)
         
-        for t in range(self.num_timesteps - 1, -1, -1):
-            t_batch = torch.tensor([t], device=device).repeat(batch_size)
-            x = self.remove_noise(x, t_batch, y, use_ema)
+#         for t in range(self.num_timesteps - 1, -1, -1):
+#             t_batch = torch.tensor([t], device=device).repeat(batch_size)
+#             x = self.remove_noise(x, t_batch, y)
 
-            if t > 0:
-                x += extract(self.sigma, t_batch, x.shape) * torch.randn_like(x)
+#             if t > 0:
+#                 x += extract(self.sigma, t_batch, x.shape) * torch.randn_like(x)
         
-        return x.cpu().detach()
+#         return x.cpu().detach()
 
-    @torch.no_grad()
-    def sample_diffusion_sequence(self, batch_size, device, y=None, use_ema=False):
-        if y is not None and batch_size != len(y):
-            raise ValueError("sample batch size different from length of given y")
+#     @torch.no_grad()
+#     def sample_diffusion_sequence(self, batch_size, device, y=None):
+#         if y is not None and batch_size != len(y):
+#             raise ValueError("sample batch size different from length of given y")
 
-        x = torch.randn(batch_size, self.img_channels, *self.img_size, device=device)
-        diffusion_sequence = [x.cpu().detach()]
+#         x = torch.randn(batch_size, self.img_channels, *self.img_size, device=device)
+#         diffusion_sequence = [x.cpu().detach()]
         
-        for t in range(self.num_timesteps - 1, -1, -1):
-            t_batch = torch.tensor([t], device=device).repeat(batch_size)
-            x = self.remove_noise(x, t_batch, y, use_ema)
+#         for t in range(self.num_timesteps - 1, -1, -1):
+#             t_batch = torch.tensor([t], device=device).repeat(batch_size)
+#             x = self.remove_noise(x, t_batch, y)
 
-            if t > 0:
-                x += extract(self.sigma, t_batch, x.shape) * torch.randn_like(x)
+#             if t > 0:
+#                 x += extract(self.sigma, t_batch, x.shape) * torch.randn_like(x)
             
-            diffusion_sequence.append(x.cpu().detach())
+#             diffusion_sequence.append(x.cpu().detach())
         
-        return diffusion_sequence
+#         return diffusion_sequence
 
-    def perturb_x(self, x, t, noise):
-        return (
-            extract(self.sqrt_alphas_cumprod, t, x.shape) * x +
-            extract(self.sqrt_one_minus_alphas_cumprod, t, x.shape) * noise
-        )   
+#     def forward(self, x, y=None):
+#         b, c, h, w, d = x.shape
+#         device = x.device
 
-    def get_losses(self, x, t, y):
-        noise = torch.randn_like(x)
-
-        perturbed_x = self.perturb_x(x, t, noise)
-        estimated_noise = self.model(perturbed_x, t, y)
-
-        if self.loss_type == "l1":
-            loss = F.l1_loss(estimated_noise, noise)
-        elif self.loss_type == "l2":
-            loss = F.mse_loss(estimated_noise, noise)
-
-        return loss
-
-    def forward(self, x, y=None):
-        b, c, h, w, d = x.shape
-        device = x.device
-
-        if h != self.img_size[0]:
-            raise ValueError("image height does not match diffusion parameters")
-        if w != self.img_size[0]:
-            raise ValueError("image width does not match diffusion parameters")
-        if d != self.img_size[0]:
-            raise ValueError("image depth does not match diffusion parameters")
+#         if h != self.img_size[0]:
+#             raise ValueError("image height does not match diffusion parameters")
+#         if w != self.img_size[0]:
+#             raise ValueError("image width does not match diffusion parameters")
+#         if d != self.img_size[0]:
+#             raise ValueError("image depth does not match diffusion parameters")
         
-        t = torch.randint(0, self.num_timesteps, (b,), device=device)
-        return self.get_losses(x, t, y)
-
-
-# %%
+#         # random creation of time step
+#         t = torch.randint(0, self.num_timesteps, (b,), device=device)
+        
+#         # gaussian noise generation
+#         noise = torch.randn_like(x)
+        
+#         # x_t = noised x at (t+1) time step
+#         x_t = extract(self.sqrt_alphas_cumprod, t, x.shape) * x + \
+#             extract(self.sqrt_one_minus_alphas_cumprod, t, x.shape) * noise
+        
+#         # noise estimation
+#         estimated_noise = self.model(x_t, t, y)
+        
+#         if self.loss_type == "l1":
+#             loss = F.l1_loss(estimated_noise, noise)
+#         elif self.loss_type == "l2":
+#             loss = F.mse_loss(estimated_noise, noise)
+            
+#         return loss

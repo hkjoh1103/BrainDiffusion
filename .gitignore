@@ -1,4 +1,5 @@
 practice
+experiment
 datasets
 test*.py
 test*.ipynb
@@ -7,3 +8,4 @@ result*
 log*
 *.pyc
 __pycache__/
+environment.yml
