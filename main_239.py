@@ -18,7 +18,7 @@ parser.add_argument("--name", required=True, type=str, dest="name")
 parser.add_argument("--mri_type", default='adc', choices=['adc', 'flair', 't1'], type=str, dest="mri_type")
 parser.add_argument("--age_type", default=None, choices=['int', 'cat', 'pos'], type=str, dest="age_type")
 
-parser.add_argument("--use_multiGPU", default=False, dest="use_multiGPU", action=argparse.BooleanOptionalAction)
+parser.add_argument("--use_multiGPU", default=False, action=argparse.BooleanOptionalAction, dest="use_multiGPU")
 parser.add_argument('--num_machines', default=1, type=int, dest="num_machines")
 parser.add_argument('--num_gpu_processes', default=1, type=int, dest="num_gpu_processes")
 parser.add_argument('--machine_id', default=0, type=int, dest="machine_id")
@@ -39,6 +39,7 @@ parser.add_argument("--channel_mults", default=(1,2,4,8), type=int, nargs='+', d
 parser.add_argument("--num_res_blocks", default=1, type=int, dest="num_res_blocks")
 parser.add_argument("--time_emb_dim", default=128*2, type=int, dest="time_emb_dim")
 
+parser.add_argument("--use_ema", default=True, action=argparse.BooleanOptionalAction, dest="use_ema")
 parser.add_argument("--ema_decay", default=0.9999, type=float, dest="ema_decay")
 parser.add_argument("--ema_update_rate", default=1, type=int, dest="ema_update_rate")
 

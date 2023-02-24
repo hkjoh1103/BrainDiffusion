@@ -1,6 +1,6 @@
-CUDA_VISIBLE_DEVICES=0 nohup python3 -u main_246.py\
+CUDA_VISIBLE_DEVICES=3 nohup python3 -u main_246.py\
     --mode 'train'\
-    --name 'exp66'\
+    --name 'exp67'\
     --mri_type 'adc'\
     --age_type 'pos'\
     \
@@ -22,6 +22,7 @@ CUDA_VISIBLE_DEVICES=0 nohup python3 -u main_246.py\
     --num_res_blocks 1\
     --time_emb_dim 256\
     \
+    --no-use_ema\
     --ema_decay 0.9999\
     --ema_update_rate 1\
     \

@@ -226,7 +226,8 @@ def train(gpu_num, args):
         loss.backward()
         opt.step()
         
-        diffusion.update_ema(iteration=iteration)
+        if args.use_ema:
+            diffusion.update_ema(iteration=iteration)
 
         train_loss_list.append(loss.item())
 
@@ -263,7 +264,7 @@ def train(gpu_num, args):
                     plt.imshow(generated_data[i,0,:,:,image_size[2]//2], cmap='gray')
                     plt.title('axial')
                     
-                plt.savefig(os.path.join(result_dir, f"Iteration{iteration}_sample_40.png"))
+                plt.savefig(os.path.join(result_dir, f"Iteration{iteration}_sample_age40.png"))
                 
                 generated_data2 = diffusion.sample(4, device=device, y=60)
                 

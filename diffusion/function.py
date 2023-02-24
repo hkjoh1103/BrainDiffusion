@@ -72,12 +72,13 @@ def extract(a, t, x_shape):
 class GaussianDiffusion3D():
     def __init__(self, model, args):
         self.model = model
-        self.ema_model = deepcopy(self.model)
-        
-        self.ema = EMA(args.ema_decay)
-        self.ema_decay = args.ema_decay
-        self.ema_update_rate = args.ema_update_rate
-        self.ema_start = args.num_iteration // 2
+        self.use_ema = args.use_ema
+        if self.use_ema:
+            self.ema_model = deepcopy(self.model)
+            self.ema = EMA(args.ema_decay)
+            self.ema_decay = args.ema_decay
+            self.ema_update_rate = args.ema_update_rate
+            self.ema_start = args.num_iteration // 2
         
         self.image_size = args.image_size
         self.time_step = args.time_step
@@ -92,6 +93,9 @@ class GaussianDiffusion3D():
         self.sigma = np.sqrt(self.betas)
         
     def update_ema(self, iteration):
+        if not self.use_ema:
+            raise ValueError("EMA model is requested to update, but use_ema is False")
+        
         if iteration % self.ema_update_rate == 0:
             if iteration < self.ema_start:
                 self.ema_model.load_state_dict(self.model.state_dict())
@@ -99,8 +103,9 @@ class GaussianDiffusion3D():
                 self.ema.update_model_average(self.ema_model, self.model)
         
     @torch.no_grad()
-    def remove_noise(self, x, t, y=None, use_ema=True):
+    def remove_noise(self, x, t, y=None):
         device = x.device
+        use_ema = self.use_ema
         
         if use_ema:
             return (
@@ -115,7 +120,8 @@ class GaussianDiffusion3D():
             )
 
     @torch.no_grad()
-    def sample(self, batch_size, device, y=None, use_ema=True):
+    def sample(self, batch_size, device, y=None):
+        use_ema = self.use_ema
         x = torch.randn(batch_size, 1, *self.image_size, device=device)
         
         for t in range(self.time_step - 1, -1, -1):
@@ -131,7 +137,8 @@ class GaussianDiffusion3D():
         return x.detach().cpu()
 
     @torch.no_grad()
-    def sample_diffusion_sequence(self, batch_size, device, y=None, use_ema=True):
+    def sample_diffusion_sequence(self, batch_size, device, y=None):
+        use_ema = self.use_ema
         x = torch.randn(batch_size, 1, *self.image_size, device=device)
         diffusion_sequence = [x.cpu().detach()]
         
