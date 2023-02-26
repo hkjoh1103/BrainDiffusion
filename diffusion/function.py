@@ -121,13 +121,12 @@ class GaussianDiffusion3D():
 
     @torch.no_grad()
     def sample(self, batch_size, device, y=None):
-        use_ema = self.use_ema
         x = torch.randn(batch_size, 1, *self.image_size, device=device)
         
         for t in range(self.time_step - 1, -1, -1):
             t_batch = torch.tensor([t], device=device).repeat(batch_size)
             y_batch = torch.tensor([y], device=device).repeat(batch_size) if y is not None else None
-            x = self.remove_noise(x, t_batch, y_batch, use_ema=use_ema)
+            x = self.remove_noise(x, t_batch, y_batch)
 
             if t > 0:
                 x += extract(self.sigma.to(device), t_batch, x.shape) * torch.randn_like(x)
@@ -138,14 +137,13 @@ class GaussianDiffusion3D():
 
     @torch.no_grad()
     def sample_diffusion_sequence(self, batch_size, device, y=None):
-        use_ema = self.use_ema
         x = torch.randn(batch_size, 1, *self.image_size, device=device)
         diffusion_sequence = [x.cpu().detach()]
         
         for t in range(self.time_step - 1, -1, -1):
             t_batch = torch.tensor([t], device=device).repeat(batch_size)
             y_batch = torch.tensor([y], device=device).repeat(batch_size) if y is not None else None
-            x = self.remove_noise(x, t_batch, y_batch, use_ema=use_ema)
+            x = self.remove_noise(x, t_batch, y_batch)
 
             if t > 0:
                 x += extract(self.sigma.to(device), t_batch, x.shape) * torch.randn_like(x)

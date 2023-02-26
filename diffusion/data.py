@@ -81,8 +81,8 @@ class DataPreprocessing():
             tio.Resize(self.image_size),
             tio.RescaleIntensity(out_min_max=(-1, 1)),
             tio.RandomFlip(axes='lr',flip_probability=0.2),
-            # tio.RandomAffine(degrees=(3,3,3), translation=(5,5,5), default_pad_value='otsu'),
-            tio.RandomElasticDeformation(num_control_points=6, max_displacement=4)
+            tio.RandomAffine(translation=(5,5,5), default_pad_value='otsu'),
+            # tio.RandomElasticDeformation(num_control_points=6, max_displacement=4)
         ])
         
         dataset = tio.SubjectsDataset(fn_list, transform=transform)
