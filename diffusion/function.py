@@ -68,7 +68,7 @@ def image_save(sample, sample_dir, name):
         plt.imshow(sample[i,0,:,:,d//2], cmap='gray')
         plt.title('axial')
           
-    plt.savefig(os.path.join(sample_dir, f"_{name}.png"))
+    plt.savefig(os.path.join(sample_dir, f"{name}.png"))
 
 def image_print(sample):
     assert len(sample.shape) == 5
@@ -76,6 +76,20 @@ def image_print(sample):
     
     print('sample value at the half point of y & z axis : ')
     print(sample[0,0,:,w//2,d//2])
+    
+def sequence_save(sequence, sample_dir, name):
+    assert type(sequence) == list
+    assert len(sequence[0].shape) == 5
+    b,c,h,w,d = sequence[0].shape
+    
+    plt.figure(figsize=(30,3*b))
+    for i in range(b):
+        for j in range(11):
+            plt.subplot(b,11,11*i + j)
+            plt.imshow(sequence[j][i,0,:,:,d//2], cmap='gray')
+
+    plt.savefig(os.path.join(sample_dir, f"{name}.png"))
+    
 
 # exponential moving average class
 class EMA():
@@ -183,3 +197,4 @@ class GaussianDiffusion3D():
         
         return diffusion_sequence
     
+# %%

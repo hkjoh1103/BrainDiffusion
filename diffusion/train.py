@@ -253,42 +253,10 @@ def train(gpu_num, args):
                 # save nii file
                 model.eval()
                 generated_data = diffusion.sample(4, device=device, y=40)
-                
-                b,*_ = generated_data.shape
-                plt.figure(figsize=(9, 3*b))
-                for i in range(b):
-                    plt.subplot(b, 3, 3*i + 1)
-                    plt.imshow(generated_data[i,0,image_size[0]//2,:,:], cmap='gray')
-                    plt.title('sagital')
-                    
-                    plt.subplot(b, 3, 3*i + 2)
-                    plt.imshow(generated_data[i,0,:,image_size[1]//2,:], cmap='gray')
-                    plt.title('coronal')
-                    
-                    plt.subplot(b, 3, 3*i + 3)
-                    plt.imshow(generated_data[i,0,:,:,image_size[2]//2], cmap='gray')
-                    plt.title('axial')
-                    
-                plt.savefig(os.path.join(result_dir, f"Iteration{iteration}_sample_age40.png"))
+                image_save(generated_data, result_dir, f"Iteration{iteration}_sample_age40")
                 
                 generated_data2 = diffusion.sample(4, device=device, y=60)
-                
-                b,*_ = generated_data2.shape
-                plt.figure(figsize=(9, 3*b))
-                for i in range(b):
-                    plt.subplot(b, 3, 3*i + 1)
-                    plt.imshow(generated_data2[i,0,image_size[0]//2,:,:], cmap='gray')
-                    plt.title('sagital')
-                    
-                    plt.subplot(b, 3, 3*i + 2)
-                    plt.imshow(generated_data2[i,0,:,image_size[1]//2,:], cmap='gray')
-                    plt.title('coronal')
-                    
-                    plt.subplot(b, 3, 3*i + 3)
-                    plt.imshow(generated_data2[i,0,:,:,image_size[2]//2], cmap='gray')
-                    plt.title('axial')
-                    
-                plt.savefig(os.path.join(result_dir, f"Iteration{iteration}_sample_age60.png"))
+                image_save(generated_data2, result_dir, f"Iteration{iteration}_sample_age60")
                 
                 #save one pth file
                 save_path = os.path.join(ckpt_dir, 'model_test1.pth')
@@ -309,28 +277,18 @@ def train(gpu_num, args):
     
     with torch.no_grad():
         # get sample sequence from final model
-        model.eval()
-        generated_sequence = diffusion.sample_diffusion_sequence(4, device=device)
-        b,*_ = generated_sequence[0].shape
-        
-        plt.figure(figsize=(30,3*b))
-        for i in range(b):
-            for j in range(1,11):
-                plt.subplot(b,11,11*i + j)
-                plt.imshow(generated_sequence[(j-1)*(time_step)//10][i,0,:,:,image_size[2]//2], cmap='gray')
-            plt.subplot(b,11,11*i + 11)
-            plt.imshow(generated_sequence[-1][i,0,:,:,image_size[2]//2], cmap='gray')
-        
         if rank == 0:
-            plt.savefig(os.path.join(result_dir, "sample_diffusion_sequence"))
-        
-        # save loss curve
-        plt.figure(figsize=(9,9))
-        log_x = np.arange(0, num_iteration, 10)
-        log_y = [np.mean(train_loss_list[i:i+10]) for i in log_x]
-        plt.plot(log_x, log_y)
-        if rank == 0:
-            plt.savefig(os.path.join(log_dir, 'log'))
+            model.eval()
+            generated_sequence = diffusion.sample_diffusion_sequence(4, device=device)
+            sequence_save(generated_sequence[::(time_step//10)], result_dir, "diffusion_sequence")
+            
+            # save loss curve
+            plt.figure(figsize=(9,9))
+            log_x = np.arange(0, num_iteration, 10)
+            log_y = [np.mean(train_loss_list[i:i+10]) for i in log_x]
+            plt.plot(log_x, log_y)
+            if rank == 0:
+                plt.savefig(os.path.join(log_dir, 'log'))
     
     print('train finished!!')
         
