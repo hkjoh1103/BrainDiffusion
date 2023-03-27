@@ -4,6 +4,7 @@ import os
 from glob import glob
 import torchio as tio
 import pandas as pd
+from pathlib import Path
 
 import torch
 from torch.utils.data import Dataset, DataLoader
@@ -27,7 +28,8 @@ class DataPreprocessing():
         # self.data_fn = config.data_fn
         self.data_dir = config.data_dir
         self.data_type = self.data_dir.split('/')[-1]
-        self.patient_dir = config.patient_dir
+        self.csv_dir = os.path.join(config.patient_dir, 'ukb.csv')
+        self.landmark_dir = os.path.join(config.patient_dir, config.mri_type + '_landmarks.npy')
         
         self.batch_size = config.batch_size
         self.image_size = config.image_size
@@ -54,7 +56,19 @@ class DataPreprocessing():
         fn_list = glob(os.path.join(self.data_dir, file_name))
         fn_list = sorted(fn_list)
         
-        data_pt = pd.read_csv(self.patient_dir, encoding='utf-8', header=0, index_col=0, usecols=['eid', '21022-0.0']).dropna(axis=0)
+        
+        landmarks_path = Path(self.landmark_dir)
+        if landmarks_path.is_file():
+            landmarks = torch.load(landmarks_path)
+        else:
+            landmarks = tio.transforms.HistogramStandardization.train(fn_list)
+            torch.save(landmarks, landmarks_path)
+            
+        landmarks_dict = {
+            'image': landmarks
+        }
+        
+        data_pt = pd.read_csv(self.csv_dir, encoding='utf-8', header=0, index_col=0, usecols=['eid', '21022-0.0']).dropna(axis=0)
         
         subject_list = []
         for subject in fn_list:
@@ -70,18 +84,20 @@ class DataPreprocessing():
         
         print('torchio subject list created')
         
-        return subject_list
+        return subject_list, landmarks_dict
     
     def get_dataset(self):
-        fn_list = self.get_list()
+        fn_list, landmarks_dict = self.get_list()
 
         transform = tio.Compose([
+            tio.Clamp(out_min = 0.0),
+            tio.HistogramStandardization(landmarks_dict),
+            tio.RescaleIntensity(out_min_max=(0, 1)),
             tio.ToCanonical(),
             tio.CropOrPad(self.crop_size, padding_mode=0),
             tio.Resize(self.image_size),
-            tio.RescaleIntensity(out_min_max=(-1, 1)),
             tio.RandomFlip(axes='lr',flip_probability=0.2),
-            tio.RandomAffine(translation=(5,5,5), default_pad_value='otsu'),
+            tio.RandomAffine(translation=(3,3,3), default_pad_value='minimum'),
             # tio.RandomElasticDeformation(num_control_points=6, max_displacement=4)
         ])
         
@@ -122,3 +138,5 @@ class DataPreprocessing():
         print('dataloader completed')
         
         return dataloader
+
+# %%

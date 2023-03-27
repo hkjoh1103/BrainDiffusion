@@ -220,6 +220,11 @@ def train(gpu_num, args):
         else:
             age = None
         
+        if iteration == 1:
+            b,c,h,w,d = data.shape
+            print('value of 1st data at middle point of y & z axis : ')
+            print(data[0,0,:,w//2,d//2])
+        
         loss = get_loss(model=model, x=data, y=age)
 
         opt.zero_grad()
@@ -327,5 +332,6 @@ def train(gpu_num, args):
         if rank == 0:
             plt.savefig(os.path.join(log_dir, 'log'))
     
+    print('train finished!!')
         
 # %%

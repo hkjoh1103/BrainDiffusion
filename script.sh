@@ -1,6 +1,6 @@
-CUDA_VISIBLE_DEVICES=1 nohup python3 -u main_246.py\
+CUDA_VISIBLE_DEVICES=2 nohup python3 -u main_246.py\
     --mode 'train'\
-    --name 'exp69'\
+    --name 'exp74'\
     --mri_type 'adc'\
     --age_type 'pos'\
     \

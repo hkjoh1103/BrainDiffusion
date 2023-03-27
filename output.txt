@@ -1,0 +1,24 @@
+device count: 1
+device : cuda:0
+==============================
+torchio subject list created
+transform completed
+dataloader completed
+size of dataloader : 4829
+==============================
+initial sampling time : 6.5
+value of 1st data at middle point of y & z axis : 
+tensor([0.0000, 0.0000, 0.0000, 0.0000, 0.0000, 0.0000, 0.0000, 0.0000, 0.0135,
+        0.2185, 0.4971, 0.4351, 0.3075, 0.2218, 0.1810, 0.1622, 0.1828, 0.2055,
+        0.2321, 0.3815, 0.1949, 0.1566, 0.1616, 0.1563, 0.1587, 0.1591, 0.1518,
+        0.1656, 0.2699, 0.4352, 0.5413, 0.4875, 0.1878, 0.1670, 0.1608, 0.1593,
+        0.1486, 0.1456, 0.1401, 0.1379, 0.1619, 0.1598, 0.3444, 0.4138, 0.2473,
+        0.1667, 0.1908, 0.2607, 0.3309, 0.3159, 0.3676, 0.2541, 0.0558, 0.0000,
+        0.0000, 0.0000, 0.0000, 0.0000, 0.0000, 0.0000, 0.0000, 0.0000, 0.0000,
+        0.0000], device='cuda:0')
+/home/egyptdj/anaconda3/envs/BrainDiffusion_3.9/lib/python3.9/site-packages/torchio/transforms/preprocessing/spatial/resize.py:73: UserWarning: Output shape (64, 64, 49) != target shape (64, 64, 48). Fixing with CropOrPad
+  warnings.warn(message)
+Iteration 10 / 12000 | loss 0.9194 | time elapsed 18.3 sec
+Iteration 20 / 12000 | loss 0.5018 | time elapsed 34.5 sec
+Iteration 30 / 12000 | loss 0.2780 | time elapsed 50.9 sec
+Iteration 40 / 12000 | loss 0.1642 | time elapsed 67.2 sec

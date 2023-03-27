@@ -3,6 +3,7 @@
 import numpy as np
 import matplotlib.pyplot as plt
 from copy import deepcopy
+import os
 
 import torch
 import torch.nn as nn
@@ -47,6 +48,34 @@ def get_norm(norm, num_channels, num_groups):
         return nn.Identity()
     else:
         raise ValueError("unknown normalization type")
+
+# Image plot & save function
+def image_save(sample, sample_dir, name):
+    assert len(sample.shape) == 5
+    b,c,h,w,d = sample.shape
+    
+    plt.figure(figsize=(9, 3*b))
+    for i in range(b):
+        plt.subplot(b, 3, 3*i + 1)
+        plt.imshow(sample[i,0,h//2,:,:], cmap='gray')
+        plt.title('sagital')
+        
+        plt.subplot(b, 3, 3*i + 2)
+        plt.imshow(sample[i,0,:,w//2,:], cmap='gray')
+        plt.title('coronal')
+        
+        plt.subplot(b, 3, 3*i + 3)
+        plt.imshow(sample[i,0,:,:,d//2], cmap='gray')
+        plt.title('axial')
+          
+    plt.savefig(os.path.join(sample_dir, f"_{name}.png"))
+
+def image_print(sample):
+    assert len(sample.shape) == 5
+    b,c,h,w,d = sample.shape
+    
+    print('sample value at the half point of y & z axis : ')
+    print(sample[0,0,:,w//2,d//2])
 
 # exponential moving average class
 class EMA():

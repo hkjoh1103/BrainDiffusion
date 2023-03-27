@@ -43,7 +43,7 @@ parser.add_argument("--use_ema", default=True, action=argparse.BooleanOptionalAc
 parser.add_argument("--ema_decay", default=0.9999, type=float, dest="ema_decay")
 parser.add_argument("--ema_update_rate", default=1, type=int, dest="ema_update_rate")
 
-parser.add_argument("--patient_dir", default="./datasets/ukb.csv", type=str, dest="patient_dir")
+# parser.add_argument("--patient_dir", default="./datasets", type=str, dest="patient_dir")
 # parser.add_argument("--ckpt_dir", default="./checkpoint", type=str, dest="ckpt_dir")
 # parser.add_argument("--log_dir", default="./log", type=str, dest="log_dir")
 # parser.add_argument("--result_dir", default="./result", type=str, dest="result_dir")
@@ -62,7 +62,7 @@ elif args.mri_type == 't1':
 else:
     raise TypeError("adc, flair, t1 중에서 mri_type argument를 입력해주세요")
 
-args.patient_dir = "./datasets/ukb.csv"
+args.patient_dir = "./datasets"
 
 local_rank = args.local_rank
 
