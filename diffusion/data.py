@@ -97,7 +97,7 @@ class DataPreprocessing():
             tio.CropOrPad(self.crop_size, padding_mode=0),
             tio.Resize(self.image_size),
             tio.RandomFlip(axes='lr',flip_probability=0.2),
-            tio.RandomAffine(translation=(3,3,3), default_pad_value='minimum'),
+            tio.RandomAffine(translation=(4,4,1), default_pad_value='minimum'),
             # tio.RandomElasticDeformation(num_control_points=6, max_displacement=4)
         ])
         

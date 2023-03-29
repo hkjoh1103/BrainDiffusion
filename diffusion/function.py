@@ -85,7 +85,7 @@ def sequence_save(sequence, sample_dir, name):
     plt.figure(figsize=(30,3*b))
     for i in range(b):
         for j in range(11):
-            plt.subplot(b,11,11*i + j)
+            plt.subplot(b,11,11*i + j + 1)
             plt.imshow(sequence[j][i,0,:,:,d//2], cmap='gray')
 
     plt.savefig(os.path.join(sample_dir, f"{name}.png"))

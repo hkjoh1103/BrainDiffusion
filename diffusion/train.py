@@ -6,6 +6,7 @@ import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
 from functools import partial
+from glob import glob
 
 import torchio as tio
 import monai
@@ -252,14 +253,19 @@ def train(gpu_num, args):
             with torch.no_grad():
                 # save nii file
                 model.eval()
-                generated_data = diffusion.sample(4, device=device, y=40)
-                image_save(generated_data, result_dir, f"Iteration{iteration}_sample_age40")
+                # generated_data = diffusion.sample(4, device=device, y=40)
+                # image_save(generated_data, result_dir, f"Iteration{iteration}_sample_age40")
                 
-                generated_data2 = diffusion.sample(4, device=device, y=60)
+                generated_data2 = diffusion.sample(2, device=device, y=60)
                 image_save(generated_data2, result_dir, f"Iteration{iteration}_sample_age60")
                 
                 #save one pth file
-                save_path = os.path.join(ckpt_dir, 'model_test1.pth')
+                save_path = os.path.join(ckpt_dir, f'model_iteration_{iteration}.pth')
+                
+                model_list = glob(os.path.join(ckpt_dir, '*.pth'))
+                model_list = sorted(model_list)
+                if len(model_list) > 3:
+                    os.remove(model_list[0])                
     
                 #save pth file as iteration
                 #save_path = os.path.join(ckpt_dir, 'model_iteration%d.pth' %i)
