@@ -4,8 +4,11 @@
 import argparse
 import torch.multiprocessing as mp
 
-from diffusion.train import *
-from diffusion.sample import *
+import diffusion_UKB.train
+import diffusion_UKB.sample
+
+import diffusion_SNU.train
+import diffusion_SNU.sample
 
 # %%
 ## Parser genration
@@ -14,6 +17,7 @@ parser = argparse.ArgumentParser(description="BrainDiffusion",
 
 parser.add_argument("--mode", default="train", choices=["train", "test", "sample"], type=str, dest="mode")
 # parser.add_argument("--train_continue", default="off", choices=["on", "off"], type=str, dest="train_continue")
+parser.add_argument("--dataset", default="UKB", choices=['UKB', 'SNU'], type=str, dest="dataset")
 parser.add_argument("--name", required=True, type=str, dest="name")
 parser.add_argument("--mri_type", default='adc', choices=['adc', 'flair', 't1'], type=str, dest="mri_type")
 parser.add_argument("--age_type", default=None, choices=['int', 'cat', 'pos'], type=str, dest="age_type")
@@ -68,18 +72,37 @@ local_rank = args.local_rank
 
 
 if __name__ == "__main__":
-    if args.mode == "train":
-        try:
-            if args.use_multiGPU:
-                mp.spawn(train, nprocs=args.num_gpu_processes, args=(args,))
-            else:
-                train(0, args)
-        except KeyboardInterrupt:
-            print('Erroor: Keyboard Interrupt')
-    elif args.mode == "test" or "sample":
-        try:
-            sample(args)
-        except KeyboardInterrupt:
-            print('Erroor: Keyboard Interrupt')
+    if args.dataset == "UKB":
+        if args.mode == "train":
+            try:
+                if args.use_multiGPU:
+                    mp.spawn(diffusion_UKB.train.train, nprocs=args.num_gpu_processes, args=(args,))
+                else:
+                    diffusion_UKB.train.train(0, args)
+            except KeyboardInterrupt:
+                print('Erroor: Keyboard Interrupt')
+        elif args.mode == "test" or "sample":
+            try:
+                diffusion_UKB.sample.sample(args)
+            except KeyboardInterrupt:
+                print('Erroor: Keyboard Interrupt')
+                
+    elif args.dataset == "SNU":
+        if args.mode == "train":
+            try:
+                if args.use_multiGPU:
+                    mp.spawn(diffusion_SNU.train.train, nprocs=args.num_gpu_processes, args=(args,))
+                else:
+                    diffusion_SNU.train.train(0, args)
+            except KeyboardInterrupt:
+                print('Erroor: Keyboard Interrupt')
+        elif args.mode == "test" or "sample":
+            try:
+                diffusion_SNU.sample.sample(args)
+            except KeyboardInterrupt:
+                print('Erroor: Keyboard Interrupt')
+                
+    else:
+        raise ValueError('dataset argument is not valid')
 # %%
 

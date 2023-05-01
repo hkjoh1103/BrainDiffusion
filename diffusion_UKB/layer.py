@@ -7,7 +7,7 @@ import torch.nn.functional as F
 
 from torch.nn.modules.normalization import GroupNorm
 
-from diffusion.function import *
+from diffusion_UKB.function import *
 
 # %%
 class PositionalEmbedding(nn.Module):

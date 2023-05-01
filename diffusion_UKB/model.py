@@ -11,8 +11,8 @@ import torch.nn.functional as F
 
 from torch.nn.modules.normalization import GroupNorm
 
-from diffusion.function import *
-from diffusion.layer import *
+from diffusion_UKB.function import *
+from diffusion_UKB.layer import *
 
 # %%
 class Unet3D(nn.Module):

@@ -6,8 +6,8 @@ import os
 
 import matplotlib.pyplot as plt
 
-from diffusion.function import GaussianDiffusion3D, image_print, image_save
-from diffusion.model import Unet3D
+from diffusion_SNU.function import GaussianDiffusion3D, image_print, image_save
+from diffusion_SNU.model import Unet3D
 
 # %%
 def sample(args):

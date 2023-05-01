@@ -19,10 +19,10 @@ from torch.nn.parallel import DistributedDataParallel as DDP
 import torch.distributed as dist
 from torchsummary import summary
 
-from diffusion.data import DataPreprocessing
-from diffusion.model import Unet3D, GaussianDiffusion3D
-from diffusion.function import *
-from diffusion.util import *
+from diffusion_UKB.data import DataPreprocessing
+from diffusion_UKB.model import Unet3D, GaussianDiffusion3D
+from diffusion_UKB.function import *
+from diffusion_UKB.util import *
 
 # %%
 def train(gpu_num, args):
