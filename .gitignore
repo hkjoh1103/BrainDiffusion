@@ -9,3 +9,5 @@ log*
 *.pyc
 __pycache__/
 environment.yml
+.gitignore
+output.txt
